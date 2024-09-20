@@ -22,8 +22,8 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', sco
 client = gspread.authorize(creds)
 
 # Устанавливаем API-ключи OpenAI и Telegram токен напрямую в коде
-openai.api_key = os.getenv("sk-QeFVXulFFgfd07PE8jgkKqQkv-lWBUu1T7LSQDGkcxT3BlbkFJXkqfnG00x2jCjd-YwDCJEDx-9YajBpEdMQV4HMxkgA")
-telegram_token = os.getenv("6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk")
+openai.api_key = "sk-QeFVXulFFgfd07PE8jgkKqQkv-lWBUu1T7LSQDGkcxT3BlbkFJXkqfnG00x2jCjd-YwDCJEDx-9YajBpEdMQV4HMxkgA"
+telegram_token = "6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk"
 
 # Шаги для диалога
 LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, ACCESSORIES_CHOICE, FLOOR, FLOOR_NUMBER, ASK_DELIVERY, ASK_CONTINUE_ORDER, GENERAL = range(13)
