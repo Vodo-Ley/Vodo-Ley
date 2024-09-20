@@ -54,15 +54,15 @@ FINAL_NOTIFICATION_RU_RAW = (
 async def root():
     return {"message": "Hello, world!"}
     
-@app.post("/webhook", response_model=None)  # Устанавливаем response_model=None
-async def webhook(update: Update):
+@app.post("/webhook", response_model=None)
+async def webhook(update: dict):  # Используем стандартный словарь для аргумента
     # Ваш код для обработки обновления
     return {"status": "success"}
     
 def ping_self():
     while True:
         try:
-            requests.get("https://<your-repl-url>.repl.co")
+            requests.get("https://vodo-ley.onrender.com")
         except Exception as e:
             print(f"Не удалось выполнить запрос: {e}")
         time.sleep(240)  # Запрос каждые 4 минут
