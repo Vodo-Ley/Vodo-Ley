@@ -54,14 +54,8 @@ FINAL_NOTIFICATION_RU_RAW = (
 async def root():
     return {"message": "Hello, world!"}
     
-    # Функция вебхука с правильными отступами
-@app.post("/webhook")
-async def webhook(update: Update):
-    # Ваш код здесь
-    pass
-    
-@app.post("/webhook", response_model=None)
-async def webhook(update: dict):
+    @app.post("/webhook", response_model=None)
+async def webhook(update: dict):  # Используем стандартный словарь для аргумента
     # Ваш код для обработки обновления
     return {"status": "success"}
     
