@@ -13,6 +13,8 @@ import threading
 import requests
 import time
 
+app = FastAPI()  # Объявление экземпляра приложения
+
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
@@ -49,7 +51,7 @@ FINAL_NOTIFICATION_RU_RAW = (
 
 @app.get("/")
 async def root():
-    return {"message": "I'm alive!"}
+    return {"message": "Hello World"}
 
 def ping_self():
     while True:
