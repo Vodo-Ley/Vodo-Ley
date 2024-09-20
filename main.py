@@ -25,7 +25,6 @@ client = gspread.authorize(creds)
 openai.api_key = os.getenv("sk-QeFVXulFFgfd07PE8jgkKqQkv-lWBUu1T7LSQDGkcxT3BlbkFJXkqfnG00x2jCjd-YwDCJEDx-9YajBpEdMQV4HMxkgA")
 telegram_token = os.getenv("6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk")
 
-
 # Шаги для диалога
 LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, ACCESSORIES_CHOICE, FLOOR, FLOOR_NUMBER, ASK_DELIVERY, ASK_CONTINUE_ORDER, GENERAL = range(13)
 
@@ -55,9 +54,11 @@ FINAL_NOTIFICATION_RU_RAW = (
 async def root():
     return {"message": "Hello, world!"}
     
-    @app.post("/webhook")
+    # Функция вебхука с правильными отступами
+@app.post("/webhook")
 async def webhook(update: Update):
-    await application.update_queue.put(update)
+    # Ваш код здесь
+    pass
 
 def ping_self():
     while True:
@@ -1130,5 +1131,11 @@ if __name__ == '__main__':
     application.run_polling(drop_pending_updates=True, timeout=30)
     print("Бот запущен и ожидает сообщений.")
 
+    # Определяем маршрут для обработки вебхука от Telegram
+    @app.post("/webhook")  # Здесь важно, чтобы отступ был ровно 4 пробела от начала строки
+    async def webhook(update: Update):
+        await application.process_update(update)
+
+    # Запуск сервера FastAPI для приема вебхуков
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
