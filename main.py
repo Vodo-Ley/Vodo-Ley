@@ -7,13 +7,14 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from time import sleep
 import re
 import os
+import uvicorn
 from openai import OpenAIError
 from fastapi import FastAPI
 import threading
 import requests
 import time
 
-app = FastAPI()  # Объявление экземпляра приложения
+app = FastAPI()
 
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -51,7 +52,7 @@ FINAL_NOTIFICATION_RU_RAW = (
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Hello, world!"}
 
 def ping_self():
     while True:
@@ -1114,3 +1115,6 @@ if __name__ == '__main__':
     print("Бот запускается на поллинге...")
     application.run_polling(drop_pending_updates=True, timeout=30)
     print("Бот запущен и ожидает сообщений.")
+
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
