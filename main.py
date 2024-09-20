@@ -54,8 +54,8 @@ FINAL_NOTIFICATION_RU_RAW = (
 async def root():
     return {"message": "Hello, world!"}
     
-    @app.post("/webhook", response_model=None)
-async def webhook(update: dict):  # Используем стандартный словарь для аргумента
+    @app.post("/webhook", response_model=None)  # Устанавливаем response_model=None
+async def webhook(update: Update):
     # Ваш код для обработки обновления
     return {"status": "success"}
     
