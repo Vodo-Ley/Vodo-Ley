@@ -9,7 +9,7 @@ import re
 import os
 import uvicorn
 from openai import OpenAIError
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import threading
 import requests
 import time
@@ -59,7 +59,14 @@ async def root():
 async def webhook(update: Update):
     # Ваш код здесь
     pass
-
+    
+@app.post("/webhook", response_model=None)  # Отключаем генерацию модели ответа
+async def webhook(request: Request):
+    json_data = await request.json()  # Получаем данные в формате JSON
+    update = Update.de_json(json_data, application.bot)  # Конвертируем данные в объект Update
+    await application.process_update(update)  # Обрабатываем обновление
+    return {"status": "ok"}  # Возвращаем простой ответ в формате словаря
+    
 def ping_self():
     while True:
         try:
@@ -1130,11 +1137,6 @@ if __name__ == '__main__':
     print("Бот запускается на поллинге...")
     application.run_polling(drop_pending_updates=True, timeout=30)
     print("Бот запущен и ожидает сообщений.")
-
-    # Определяем маршрут для обработки вебхука от Telegram
-    @app.post("/webhook")  # Здесь важно, чтобы отступ был ровно 4 пробела от начала строки
-    async def webhook(update: Update):
-        await application.process_update(update)
 
     # Запуск сервера FastAPI для приема вебхуков
     port = int(os.environ.get("PORT", 8000))
