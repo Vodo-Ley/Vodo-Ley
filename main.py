@@ -9,7 +9,7 @@ import re
 import os
 import uvicorn
 from openai import OpenAIError
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 import threading
 import requests
 import time
@@ -60,12 +60,10 @@ async def webhook(update: Update):
     # Ваш код здесь
     pass
     
-@app.post("/webhook", response_model=None)  # Отключаем генерацию модели ответа
-async def webhook(request: Request):
-    json_data = await request.json()  # Получаем данные в формате JSON
-    update = Update.de_json(json_data, application.bot)  # Конвертируем данные в объект Update
-    await application.process_update(update)  # Обрабатываем обновление
-    return {"status": "ok"}  # Возвращаем простой ответ в формате словаря
+@app.post("/webhook", response_model=None)
+async def webhook(update: dict):
+    # Ваш код для обработки обновления
+    return {"status": "success"}
     
 def ping_self():
     while True:
