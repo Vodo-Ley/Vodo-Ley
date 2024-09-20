@@ -54,6 +54,10 @@ FINAL_NOTIFICATION_RU_RAW = (
 @app.get("/")
 async def root():
     return {"message": "Hello, world!"}
+    
+    @app.post("/webhook")
+async def webhook(update: Update):
+    await application.update_queue.put(update)
 
 def ping_self():
     while True:
@@ -1092,6 +1096,15 @@ if __name__ == '__main__':
     # Инициализация приложения Telegram
     application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
 
+    # Установка вебхука для получения обновлений
+    webhook_url = "https://vodo-ley.onrender.com"  # Замените <ваш-домен> на ваш реальный URL
+    try:
+        print(f"Установка вебхука на {webhook_url}...")
+        application.bot.set_webhook(url=webhook_url)
+        print("Вебхук установлен.")
+    except Exception as e:
+        print(f"Ошибка установки вебхука: {e}")
+        
     # Добавление ConversationHandler
     print("Добавление ConversationHandler...")
     application.add_handler(order_conversation)
