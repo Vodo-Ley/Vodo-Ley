@@ -1026,6 +1026,10 @@ def get_prices_from_sheet(language):
     except Exception as e:
         return None
 
+async def delete_existing_webhook():
+    # Удаление активного вебхука, если он существует
+    await application.bot.delete_webhook(drop_pending_updates=True)
+
 order_conversation = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
@@ -1074,14 +1078,17 @@ if __name__ == '__main__':
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response))
     print("Универсальный обработчик для всех текстовых сообщений добавлен.")
 
+    # Удаление вебхука перед запуском поллинга
+    asyncio.run(delete_existing_webhook())
+    
     # Запуск бота на поллинге
     print("Бот запускается на поллинге...")
-    application.run_polling(drop_pending_updates=True, timeout=30)
+    application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
     application.run_webhook(
-    listen="0.0.0.0",
+        listen="0.0.0.0",
         port=int(os.environ.get('PORT', '8443')),
         url_path=telegram_token,
         webhook_url=f"https://vodo-ley.onrender.com/{telegram_token}"
-)
+    )
