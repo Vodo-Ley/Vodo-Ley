@@ -1127,10 +1127,7 @@ if __name__ == '__main__':
     print("Добавление универсального обработчика для всех текстовых сообщений...")
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response))
     print("Универсальный обработчик для всех текстовых сообщений добавлен.")
-
-    # Запускаем основной асинхронный метод
-    asyncio.run(main())
-
+   
     # Запуск веб-сервера для прослушивания вебхуков
     application.run_webhook(
         listen="0.0.0.0",
