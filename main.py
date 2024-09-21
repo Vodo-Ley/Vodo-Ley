@@ -1237,5 +1237,19 @@ order_conversation = ConversationHandler(
 )
 
 if __name__ == '__main__':
-    # Запуск асинхронного кода с помощью asyncio.run()
-    asyncio.run(main())
+    try:
+        # Попробуем получить текущий event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            print("Event loop уже запущен. Используем существующий loop.")
+            # Если loop уже запущен, добавляем main в существующий event loop
+            loop.create_task(main())
+        else:
+            print("Запуск нового event loop.")
+            loop.run_until_complete(main())
+    except RuntimeError as e:
+        print(f"Ошибка RuntimeError: {e}")
+        print("Создаем новый event loop.")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main())
