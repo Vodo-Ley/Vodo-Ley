@@ -1,4 +1,3 @@
-# Импорты и глобальные переменные
 import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -15,9 +14,6 @@ from telegram.ext import (
 from time import sleep
 import re
 import os
-import uvicorn
-from openai import OpenAIError
-from fastapi import FastAPI
 import threading
 import requests
 import time
@@ -62,37 +58,7 @@ def escape_markdown(text):
     # Экранирует символы, которые могут вызвать ошибку в Markdown.
     escape_chars = r'_[]()~`>#+-=|{}!\\.'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
-
-# Определение FastAPI приложения
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"message": "Hello, world!"}
-
-# Определение функции set_webhook
-async def set_webhook(application, webhook_url):
-    try:
-        print(f"Установка вебхука на {webhook_url}...")
-        await application.bot.set_webhook(url=webhook_url)
-        print("Вебхук установлен.")
-    except Exception as e:
-        print(f"Ошибка установки вебхука: {e}")
-
-@app.get("/", include_in_schema=False)
-async def read_root():
-    return {"message": "Hello, world!"}
-
-@app.head("/", include_in_schema=False)
-async def head_root():
-    return {"message": "Hello, world!"}
-
-# Функция для запуска FastAPI сервера
-def run_fastapi():
-    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
-    server = uvicorn.Server(config)
-    server.run()
-
+    
 # Обработка команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Очистка данных пользователя и загрузка прайсов
@@ -1060,44 +1026,55 @@ def get_prices_from_sheet(language):
     except Exception as e:
         return None
 
-# Обработчик состояния LANGAUGE и начало разговора
 order_conversation = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
         LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],  # Обработка выбора языка и начала разговора
+        SERVICE_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_service_type)],
+        WATER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_water_type)],
+        ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address)],
+        PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)],
+        WATER_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_water_amount)],
+        ACCESSORIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_accessories_offer)],
+        ACCESSORIES_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_accessories_choice)],
+        FLOOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_floor)],
+        FLOOR_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_floor_number)],
+        ASK_DELIVERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ask_delivery)],
+        ASK_CONTINUE_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_continue_order)],
         GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],  # Обработчик состояния GENERAL
     },
     fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
     per_message=False
 )
 
-# Основной блок инициализации приложения и бота
+# Основной блок запуска бота
 if __name__ == '__main__':
     print("Запуск бота...")
 
-    # Инициализация Telegram бота
-    application = ApplicationBuilder().token(telegram_token).build()
-       
-    # Добавление ваших ConversationHandlers и других обработчиков
-    application.add_handler(CommandHandler('start', start))
+    # Инициализация приложения Telegram
+    application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
+
+    # Добавление ConversationHandler
+    print("Добавление ConversationHandler...")
+    application.add_handler(order_conversation)
+    print("ConversationHandler добавлен.")
 
     # Добавление командного обработчика для вызова AI
     print("Добавление обработчика для команды /call_ai...")
     application.add_handler(CommandHandler('call_ai', call_ai))
     print("CommandHandler для /call_ai добавлен.")
 
-    # Пауза для гарантии запуска сервера
-    time.sleep(5) 
-    
-    # Установка вебхука
-    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
+    # Добавление обработчика для повторного заказа
+    print("Добавление обработчика для повторного заказа...")
+    application.add_handler(CallbackQueryHandler(repeat_order, pattern='repeat_order'))
+    print("CallbackQueryHandler добавлен.")
 
-    # Запуск сервера FastAPI для приема вебхуков (если используете вебхуки)
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Добавление универсального обработчика для всех текстовых сообщений
+    print("Добавление универсального обработчика для всех текстовых сообщений...")
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response))
+    print("Универсальный обработчик для всех текстовых сообщений добавлен.")
 
     # Запуск бота на поллинге
-    # print("Бот запускается на поллинге...")
-    # application.run_polling(drop_pending_updates=True, timeout=30)
-    # print("Бот запущен и ожидает сообщений.")
-
+    print("Бот запускается на поллинге...")
+    application.run_polling(drop_pending_updates=True, timeout=30)
+    print("Бот запущен и ожидает сообщений.")
