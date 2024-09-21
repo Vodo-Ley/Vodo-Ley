@@ -1,3 +1,4 @@
+# Импорты и глобальные переменные
 import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -17,12 +18,10 @@ import os
 import uvicorn
 from openai import OpenAIError
 from fastapi import FastAPI
-from fastapi import Request
 import threading
 import requests
 import time
 import asyncio
-from your_module_name import set_webhook
 
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -71,7 +70,7 @@ app = FastAPI()
 async def root():
     return {"message": "Hello, world!"}
 
-# Определение функции set_webhook перед её вызовом
+# Определение функции set_webhook
 async def set_webhook(application, webhook_url):
     try:
         print(f"Установка вебхука на {webhook_url}...")
@@ -1090,8 +1089,8 @@ if __name__ == '__main__':
     # Пауза для гарантии запуска сервера
     time.sleep(5) 
     
-    # Запуск бота на поллинге или вебхуке
-    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))  # Вызов функции для установки вебхука
+    # Установка вебхука
+    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
 
     # Запуск сервера FastAPI для приема вебхуков (если используете вебхуки)
     port = int(os.environ.get("PORT", 10000))
