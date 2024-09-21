@@ -65,6 +65,7 @@ async def main():
     await application.bot.delete_webhook(drop_pending_updates=True)
     print("Webhook удален. Запуск поллинга...")
 
+    # Запуск бота с поллингом
     await application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
@@ -1090,17 +1091,15 @@ if __name__ == '__main__':
     print("Запуск бота...")
     
     try:
+        # Попытка получить текущий event loop
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # Если event loop уже запущен, используем его для запуска main()
             print("Event loop уже запущен. Используем существующий loop.")
-            loop.create_task(main())
+            loop.create_task(main())  # Добавление корутины в уже существующий цикл событий
         else:
-            # Если нет, запускаем через asyncio.run()
             print("Запускаем новый event loop.")
-            asyncio.run(main())
-    except RuntimeError as e:
-        # Если event loop не существует, создаем новый и запускаем main()
+            loop.run_until_complete(main())  # Запуск main через event loop
+    except RuntimeError:
         print("Создаем новый event loop.")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
