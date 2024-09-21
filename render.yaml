@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: vodo-ley-service  # Здесь укажите любое удобное вам имя сервиса
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python main.py"
+    envVars:
+      - key: PORT
+        value: "8443"  # Указываем порт, который будет прослушивать ваше приложение
