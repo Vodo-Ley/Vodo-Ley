@@ -93,6 +93,94 @@ def escape_markdown(text):
     escape_chars = r'_[]()~`>#+-=|{}!\\.'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
+# Обновленная функция для отправки финального уведомления с правильным экранированием
+async def send_final_notification(update, context):
+    language = context.user_data.get('language', 'uk')
+    final_notification_raw = FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
+    
+    # Экранируем только перед отправкой
+    final_notification = escape_markdown_v2(final_notification_raw)
+    await update.message.reply_text(final_notification, parse_mode='MarkdownV2')
+
+# Функция для получения прайсов из Google Sheets с учетом языка
+def get_prices_from_sheet(language):
+    try:
+        sheet = client.open('Прайс-лист').sheet1
+        data = sheet.get_all_records()
+
+        prices = {'water': {}, 'accessories': []}
+        name_column = 'Название (укр)' if language == 'uk' else 'Название (рус)'
+
+        def parse_price(value):
+            try:
+                return float(str(value).replace(',', '.'))
+            except ValueError:
+                return 0.0
+
+        for row in data:
+            item_type = row['Тип'].lower()
+            if item_type == 'water':
+                water_name = row[name_column].strip().lower()
+                prices['water'][water_name] = {
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                }
+            elif item_type in ['pump', 'container']:
+                prices['accessories'].append({
+                    'name': row[name_column].strip(),
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                })
+
+        return prices
+
+    except Exception as e:
+        return None
+
+# Обновленная функция для отправки финального уведомления с правильным экранированием
+async def send_final_notification(update, context):
+    language = context.user_data.get('language', 'uk')
+    final_notification_raw = FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
+    
+    # Экранируем только перед отправкой
+    final_notification = escape_markdown_v2(final_notification_raw)
+    await update.message.reply_text(final_notification, parse_mode='MarkdownV2')
+
+# Функция для получения прайсов из Google Sheets с учетом языка
+def get_prices_from_sheet(language):
+    try:
+        sheet = client.open('Прайс-лист').sheet1
+        data = sheet.get_all_records()
+
+        prices = {'water': {}, 'accessories': []}
+        name_column = 'Название (укр)' if language == 'uk' else 'Название (рус)'
+
+        def parse_price(value):
+            try:
+                return float(str(value).replace(',', '.'))
+            except ValueError:
+                return 0.0
+
+        for row in data:
+            item_type = row['Тип'].lower()
+            if item_type == 'water':
+                water_name = row[name_column].strip().lower()
+                prices['water'][water_name] = {
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                }
+            elif item_type in ['pump', 'container']:
+                prices['accessories'].append({
+                    'name': row[name_column].strip(),
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                })
+
+        return prices
+
+    except Exception as e:
+        return None
+
 # Обработка команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -136,27 +224,6 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Выберите тип услуги: 1 - Доставка, 2 - Самовывоз.")
     
     return SERVICE_TYPE
-
-async def call_ai(update: Update, context):
-    print("[LOG] Команда /call_ai вызвана.")
-    language = context.user_data.get('language', 'uk')
-    print(f"[LOG] Язык для ИИ: {language}")
-
-    if language == 'uk':
-        welcome_message = "Привіт! Я штучний інтелект і готовий допомогти вам. Ви можете задати будь-яке питання, і я спробую дати вам відповідь."
-    else:
-        welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
-
-    try:
-        print("[LOG] Отправка приветственного сообщения...")
-        await update.message.reply_text(welcome_message)
-        print("[LOG] Приветственное сообщение отправлено.")
-    except Exception as e:
-        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
-
-    context.user_data['state'] = GENERAL
-    print("[LOG] Переход в состояние GENERAL.")
-    return GENERAL
 
 def set_user_state(context, state):
     context.user_data['state'] = state
