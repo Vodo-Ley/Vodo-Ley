@@ -1085,21 +1085,16 @@ if __name__ == '__main__':
         await application.bot.delete_webhook(drop_pending_updates=True)
         print("Webhook удален. Запуск поллинга...")
 
-        # Запуск бота на поллинге
         await application.run_polling(drop_pending_updates=True)
         print("Бот запущен и ожидает сообщений.")
-
-    print("Бот запускается на поллинге...")
-    # Запуск бота на поллинге
-    application.run_polling(drop_pending_updates=True)
-    print("Бот запущен и ожидает сообщений.")
 
     # Запускаем основной асинхронный метод
     asyncio.run(main())
 
+    # Запуск веб-сервера для прослушивания вебхуков
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', '8443')),
         url_path=telegram_token,
-        webhook_url=f"https://vodo-ley.onrender.com/{telegram_token}"
+        webhook_url=f"https://your-domain.com/{telegram_token}"  # Укажите ваш домен
     )
