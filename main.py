@@ -1096,5 +1096,5 @@ if __name__ == '__main__':
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', '8443')),
         url_path=telegram_token,
-        webhook_url=f"https://your-domain.com/{telegram_token}"  # Укажите ваш домен
+        webhook_url=f"https://vodo-ley.onrender.com/{telegram_token}"  # Укажите ваш домен
     )
