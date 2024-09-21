@@ -1237,17 +1237,20 @@ order_conversation = ConversationHandler(
     per_message=False
 )
 
-# Основной блок запуска бота
 if __name__ == '__main__':
     print("Запуск бота...")
     try:
+        # Получаем текущий event loop или создаем новый
         loop = asyncio.get_event_loop()
-        if loop.is_running():
-            print("Event loop уже запущен. Используем существующий loop.")
-            loop.create_task(main())
-        else:
+        
+        # Проверяем, если loop уже запущен
+        if not loop.is_running():
             print("Запускаем новый event loop.")
-            loop.run_until_complete(main())
+            loop.run_until_complete(main())  # Запуск main через event loop
+        else:
+            print("Event loop уже запущен. Используем существующий loop.")
+            loop.create_task(main())  # Добавление корутины в уже существующий цикл событий
+
     except RuntimeError:
         print("Создаем новый event loop.")
         loop = asyncio.new_event_loop()
