@@ -1051,16 +1051,7 @@ if __name__ == '__main__':
 
     # Инициализация Telegram бота
     application = ApplicationBuilder().token(telegram_token).build()
-
-    # Асинхронная установка вебхука для получения обновлений
-async def set_webhook(application, webhook_url):
-    try:
-        print(f"Установка вебхука на {webhook_url}...")
-        await application.bot.set_webhook(url=webhook_url)
-        print("Вебхук установлен.")
-    except Exception as e:
-        print(f"Ошибка установки вебхука: {e}")
-        
+       
     # Добавление ConversationHandler
     print("Добавление ConversationHandler...")
     application.add_handler(order_conversation)
@@ -1071,20 +1062,28 @@ async def set_webhook(application, webhook_url):
     application.add_handler(CommandHandler('call_ai', call_ai))
     print("CommandHandler для /call_ai добавлен.")
 
-    # Запуск бота на поллинге
-    print("Бот запускается на поллинге...")
-    application.run_polling(drop_pending_updates=True, timeout=30)
-    print("Бот запущен и ожидает сообщений.")
-
     # Запуск сервера FastAPI для приема вебхуков
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8000))  # Убедитесь, что переменная PORT доступна
     print(f"Запуск сервера FastAPI на порту {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port)
-    
-    # Убедитесь, что сервер FastAPI запущен
-    threading.Thread(target=run_fastapi).start()
-    time.sleep(5)  # Небольшая пауза для гарантии запуска сервера
+    threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "0.0.0.0", "port": port}).start()
+
+    # Пауза для гарантии запуска сервера
+    time.sleep(5)
+        
+    # Асинхронная установка вебхука для получения обновлений
+    async def set_webhook(application, webhook_url):
+        try:
+            print(f"Установка вебхука на {webhook_url}...")
+            await application.bot.set_webhook(url=webhook_url)
+            print("Вебхук установлен.")
+        except Exception as e:
+            print(f"Ошибка установки вебхука: {e}")
 
     # Установка вебхука после запуска сервера
     asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
+
+    # Запуск бота на поллинге
+    # print("Бот запускается на поллинге...")
+    # application.run_polling(drop_pending_updates=True, timeout=30)
+    # print("Бот запущен и ожидает сообщений.")
 
