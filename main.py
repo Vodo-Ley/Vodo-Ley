@@ -13,6 +13,7 @@ from fastapi import FastAPI
 import threading
 import requests
 import time
+import asyncio
 
 app = FastAPI()
 
@@ -53,6 +54,19 @@ FINAL_NOTIFICATION_RU_RAW = (
 @app.get("/")
 async def root():
     return {"message": "Hello, world!"}
+
+# Функция для запуска FastAPI сервера
+def run_fastapi():
+    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    server.run()
+
+# Функция для запуска Telegram Bot
+async def run_telegram_bot():
+    application = ApplicationBuilder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
+    # Добавьте сюда ваши хендлеры
+    await application.start()
+    await application.idle()
     
 @app.post("/webhook", response_model=None)
 async def webhook(update: dict):  # Используем стандартный словарь для аргумента
@@ -1133,3 +1147,9 @@ if __name__ == '__main__':
     # Запуск сервера FastAPI для приема вебхуков
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # Запускаем FastAPI в отдельном потоке
+    threading.Thread(target=run_fastapi).start()
+    
+    # Запуск Telegram Bot в основном потоке
+    asyncio.run(run_telegram_bot())
