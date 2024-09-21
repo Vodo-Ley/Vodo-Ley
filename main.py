@@ -34,33 +34,6 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
-# Определение основной функции main
-async def main():
-    print("Запуск бота...")
-
-    # Инициализация приложения Telegram
-    application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
-
-    # Добавление ConversationHandler
-    print("Добавление ConversationHandler...")
-    application.add_handler(order_conversation)
-    print("ConversationHandler добавлен.")
-
-    # Добавление командного обработчика для вызова AI
-    print("Добавление обработчика для команды /call_ai...")
-    application.add_handler(CommandHandler('call_ai', call_ai))
-    print("CommandHandler для /call_ai добавлен.")
-
-    # Добавление обработчика для повторного заказа
-    print("Добавление обработчика для повторного заказа...")
-    application.add_handler(CallbackQueryHandler(repeat_order, pattern='repeat_order'))
-    print("CallbackQueryHandler добавлен.")
-
-    # Добавление универсального обработчика для всех текстовых сообщений
-    print("Добавление универсального обработчика для всех текстовых сообщений...")
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response))
-    print("Универсальный обработчик для всех текстовых сообщений добавлен.")
-
     # Удаление вебхука перед запуском поллинга
     await application.bot.delete_webhook(drop_pending_updates=True)
     print("Webhook удален. Запуск поллинга...")
