@@ -1078,3 +1078,9 @@ if __name__ == '__main__':
     print("Бот запускается на поллинге...")
     application.run_polling(drop_pending_updates=True, timeout=30)
     print("Бот запущен и ожидает сообщений.")
+
+    application.run_webhook(
+    listen="0.0.0.0",
+        port=int(os.environ.get('PORT', '8443')),
+        url_path=telegram_token,
+        webhook_url=f"https://vodo-ley.onrender.com/{6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk}"
