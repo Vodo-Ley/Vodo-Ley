@@ -114,9 +114,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     @app.post("/")
     async def webhook(request: Request):
-    json_data = await request.json()  # Обратите внимание на отступ
-    # Здесь должен быть код функции с отступом
-    # Например:
+    # Весь код внутри функции должен быть с отступами
+    json_data = await request.json()  # Отступ 4 пробела или 1 табуляция
     update = telegram.Update.de_json(json_data, application.bot)
     await application.process_update(update)
     return {"message": "Webhook received successfully"}
