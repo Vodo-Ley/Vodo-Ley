@@ -51,6 +51,26 @@ FINAL_NOTIFICATION_RU_RAW = (
     "Мы рады Вам и хотим предоставить бонус от нас, нажмите /call_ai и к Вам подключится ИИ поможет во всех интересующих Вас вопросах."
 )
 
+def start(bot, update):
+    # Ваш код для обработки команды /start
+    update.message.reply_text("Привет! Это бот на версии 0.28.0")
+    # Функция для запуска бота
+
+def main():
+    # Указываем ваш токен
+    token = '6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk'
+    updater = Updater(token)
+
+    # Диспетчер для регистрации обработчиков
+    dp = updater.dispatcher
+
+    # Регистрируем обработчики команд
+    dp.add_handler(CommandHandler('start', start))
+
+    # Запуск бота
+    updater.start_polling()
+    updater.idle()
+    
 @app.get("/")
 async def root():
     return {"message": "Hello, world!"}
