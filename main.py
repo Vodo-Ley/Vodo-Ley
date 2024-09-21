@@ -1087,6 +1087,14 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Ошибка установки вебхука: {e}")
 
+    @app.post("/")
+async def webhook(request: Request):
+    json_data = await request.json()
+    # Обработка данных, которые пришли от Telegram
+    update = telegram.Update.de_json(json_data, application.bot)
+    await application.process_update(update)
+    return {"message": "Webhook received successfully"}
+
     # Установка вебхука после запуска сервера
     asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
 
