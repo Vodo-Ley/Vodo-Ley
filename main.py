@@ -1100,13 +1100,14 @@ if __name__ == '__main__':
     print("Универсальный обработчик для всех текстовых сообщений добавлен.")
 
     # Удаление вебхука перед запуском поллинга
-    asyncio.run(main())
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main())
+    async def delete_existing_webhook():
+        # Удаление активного вебхука, если он существует
+        await application.bot.delete_webhook(drop_pending_updates=True)
     
-    # Запуск бота на поллинге
+    asyncio.run(delete_existing_webhook())  # Удаляем вебхук перед запуском поллинга
+
     print("Бот запускается на поллинге...")
+    # Запуск бота на поллинге
     application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
