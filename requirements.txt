@@ -5,3 +5,5 @@ oauth2client
 openai
 requests
 telegram
+python-telegram-bot>=13.0,<14.0
+
