@@ -1244,7 +1244,7 @@ if __name__ == '__main__':
         # Проверяем, если loop уже запущен
         if not loop.is_running():
             print("Запуск нового event loop.")
-            loop.run_until_complete(main())  # Запуск main через event loop
+            asyncio.run(main())  # Используем asyncio.run для запуска main
         else:
             print("Event loop уже запущен. Используем существующий loop.")
             loop.create_task(main())  # Добавление корутины в уже существующий цикл событий
