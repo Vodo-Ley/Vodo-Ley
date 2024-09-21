@@ -22,6 +22,7 @@ import threading
 import requests
 import time
 import asyncio
+from your_module_name import set_webhook
 
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -70,6 +71,15 @@ app = FastAPI()
 async def root():
     return {"message": "Hello, world!"}
 
+# Определение функции set_webhook перед её вызовом
+async def set_webhook(application, webhook_url):
+    try:
+        print(f"Установка вебхука на {webhook_url}...")
+        await application.bot.set_webhook(url=webhook_url)
+        print("Вебхук установлен.")
+    except Exception as e:
+        print(f"Ошибка установки вебхука: {e}")
+
 @app.get("/", include_in_schema=False)
 async def read_root():
     return {"message": "Hello, world!"}
@@ -102,15 +112,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=start_keyboard
     )
     return LANGUAGE
-
-# Асинхронная установка вебхука для получения обновлений
-    async def set_webhook(application, webhook_url):
-        try:
-            print(f"Установка вебхука на {webhook_url}...")
-            await application.bot.set_webhook(url=webhook_url)
-            print("Вебхук установлен.")
-        except Exception as e:
-            print(f"Ошибка установки вебхука: {e}")
 
     @app.post("/")
     async def webhook(request: Request):
@@ -1078,26 +1079,23 @@ if __name__ == '__main__':
     # Инициализация Telegram бота
     application = ApplicationBuilder().token(telegram_token).build()
        
-    # Добавление ConversationHandler
-    print("Добавление ConversationHandler...")
-    application.add_handler(order_conversation)
-    print("ConversationHandler добавлен.")
+    # Добавление ваших ConversationHandlers и других обработчиков
+    application.add_handler(CommandHandler('start', start))
 
     # Добавление командного обработчика для вызова AI
     print("Добавление обработчика для команды /call_ai...")
     application.add_handler(CommandHandler('call_ai', call_ai))
     print("CommandHandler для /call_ai добавлен.")
 
-    # Запуск сервера FastAPI для приема вебхуков
-    port = int(os.environ.get("PORT", 10000))  # Убедитесь, что переменная PORT доступна
-    print(f"Запуск сервера FastAPI на порту {port}...")
-    threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "0.0.0.0", "port": port}).start()
-
     # Пауза для гарантии запуска сервера
     time.sleep(5) 
     
-    # Установка вебхука после запуска сервера
-    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
+    # Запуск бота на поллинге или вебхуке
+    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))  # Вызов функции для установки вебхука
+
+    # Запуск сервера FastAPI для приема вебхуков (если используете вебхуки)
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
     # Запуск бота на поллинге
     # print("Бот запускается на поллинге...")
