@@ -69,6 +69,14 @@ app = FastAPI()
 async def root():
     return {"message": "Hello, world!"}
 
+@app.get("/", include_in_schema=False)
+async def read_root():
+    return {"message": "Hello, world!"}
+
+@app.head("/", include_in_schema=False)
+async def head_root():
+    return {"message": "Hello, world!"}
+
 # Функция для запуска FastAPI сервера
 def run_fastapi():
     config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
