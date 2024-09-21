@@ -1080,9 +1080,11 @@ async def set_webhook(application, webhook_url):
     port = int(os.environ.get("PORT", 8000))
     print(f"Запуск сервера FastAPI на порту {port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-    # Запускаем FastAPI в отдельном потоке
-    threading.Thread(target=run_fastapi).start()
     
-    # Запуск Telegram Bot в основном потоке
+    # Убедитесь, что сервер FastAPI запущен
+    threading.Thread(target=run_fastapi).start()
+    time.sleep(5)  # Небольшая пауза для гарантии запуска сервера
+
+    # Установка вебхука после запуска сервера
     asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
+
