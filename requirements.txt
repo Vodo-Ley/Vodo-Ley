@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+./path/to/python_telegram_bot-0.28.0.tar.gz
 python-telegram-bot==0.28.0
 openai
 gspread
