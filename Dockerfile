@@ -1,14 +1,16 @@
-# Используем официальный базовый образ Python
 FROM python:3.9
 
-# Устанавливаем рабочую директорию в контейнере
+# Установка необходимых зависимостей
+RUN pip install python-telegram-bot==0.28.0
+
+# Копируем ваш код в контейнер
+COPY . /app
+
+# Установка зависимостей из requirements.txt
+RUN pip install -r /app/requirements.txt
+
+# Указываем рабочую директорию
 WORKDIR /app
 
-# Копируем все файлы в контейнер
-COPY . .
-
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Указываем команду для запуска приложения
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Команда запуска вашего бота
+CMD ["python", "main.py"]
