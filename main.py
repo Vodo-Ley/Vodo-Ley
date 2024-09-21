@@ -1071,7 +1071,7 @@ if __name__ == '__main__':
     print("CommandHandler для /call_ai добавлен.")
 
     # Запуск сервера FastAPI для приема вебхуков
-    port = int(os.environ.get("PORT", 8000))  # Убедитесь, что переменная PORT доступна
+    port = int(os.environ.get("PORT", 10000))  # Убедитесь, что переменная PORT доступна
     print(f"Запуск сервера FastAPI на порту {port}...")
     threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "0.0.0.0", "port": port}).start()
 
