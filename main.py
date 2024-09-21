@@ -17,6 +17,7 @@ import os
 import uvicorn
 from openai import OpenAIError
 from fastapi import FastAPI
+from fastapi import Request
 import threading
 import requests
 import time
@@ -101,6 +102,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=start_keyboard
     )
     return LANGUAGE
+
+# Асинхронная установка вебхука для получения обновлений
+    async def set_webhook(application, webhook_url):
+        try:
+            print(f"Установка вебхука на {webhook_url}...")
+            await application.bot.set_webhook(url=webhook_url)
+            print("Вебхук установлен.")
+        except Exception as e:
+            print(f"Ошибка установки вебхука: {e}")
+
+    @app.post("/")
+    async def webhook(request: Request):
+    json_data = await request.json()  # Обратите внимание на отступ
+    # Здесь должен быть код функции с отступом
+    # Например:
+    update = telegram.Update.de_json(json_data, application.bot)
+    await application.process_update(update)
+    return {"message": "Webhook received successfully"}
 
 # Обработка выбора кнопки и автоматическое определение языка
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1076,25 +1095,8 @@ if __name__ == '__main__':
     threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "0.0.0.0", "port": port}).start()
 
     # Пауза для гарантии запуска сервера
-    time.sleep(5)
-        
-    # Асинхронная установка вебхука для получения обновлений
-    async def set_webhook(application, webhook_url):
-        try:
-            print(f"Установка вебхука на {webhook_url}...")
-            await application.bot.set_webhook(url=webhook_url)
-            print("Вебхук установлен.")
-        except Exception as e:
-            print(f"Ошибка установки вебхука: {e}")
-
-    @app.post("/")
-    async def webhook(request: Request):
-    json_data = await request.json()
-    # Обработка данных, которые пришли от Telegram
-    update = telegram.Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-    return {"message": "Webhook received successfully"}
-
+    time.sleep(5) 
+    
     # Установка вебхука после запуска сервера
     asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
 
