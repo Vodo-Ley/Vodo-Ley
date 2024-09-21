@@ -34,7 +34,6 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
-
 # Определение основной функции main
 async def main():
     print("Запуск бота...")
@@ -1093,13 +1092,16 @@ if __name__ == '__main__':
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # Если loop уже запущен, используем его для запуска main()
+            # Если event loop уже запущен, используем его для запуска main()
+            print("Event loop уже запущен. Используем существующий loop.")
             loop.create_task(main())
         else:
             # Если нет, запускаем через asyncio.run()
+            print("Запускаем новый event loop.")
             asyncio.run(main())
     except RuntimeError as e:
         # Если event loop не существует, создаем новый и запускаем main()
+        print("Создаем новый event loop.")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(main())
