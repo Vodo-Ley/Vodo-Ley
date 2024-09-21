@@ -1,9 +1,16 @@
 import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import telegram
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler, ContextTypes,)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ConversationHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 from time import sleep
 import re
 import os
@@ -52,13 +59,11 @@ FINAL_NOTIFICATION_RU_RAW = (
 )
 
 def start(bot, update):
-    # Ваш код для обработки команды /start
-    update.message.reply_text("Привет! Это бот на версии 0.28.0")
-    # Функция для запуска бота
+    update.message.reply_text("Привет! Это бот на современной версии библиотеки.")
 
 def main():
     # Указываем ваш токен
-    token = '6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk'
+    token = telegram_token
     updater = Updater(token)
 
     # Диспетчер для регистрации обработчиков
@@ -70,7 +75,7 @@ def main():
     # Запуск бота
     updater.start_polling()
     updater.idle()
-    
+
 @app.get("/")
 async def root():
     return {"message": "Hello, world!"}
@@ -83,25 +88,23 @@ def run_fastapi():
 
 # Функция для запуска Telegram Bot
 async def run_telegram_bot():
-    application = ApplicationBuilder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
+    application = ApplicationBuilder().token(telegram_token).build()
     # Добавьте сюда ваши хендлеры
     await application.start()
     await application.idle()
-    
+
 @app.post("/webhook", response_model=None)
-async def webhook(update: dict):  # Используем стандартный словарь для аргумента
-    # Ваш код для обработки обновления
+async def webhook(update: dict):
     return {"status": "success"}
-    
+
 def ping_self():
     while True:
         try:
             requests.get("https://vodo-ley.onrender.com")
         except Exception as e:
             print(f"Не удалось выполнить запрос: {e}")
-        time.sleep(240)  # Запрос каждые 4 минут
+        time.sleep(240)  # Запрос каждые 4 минуты
 
-# Запуск фонового потока для пингования самого себя
 threading.Thread(target=ping_self).start()
 
 # Обновленная функция для отправки финального уведомления с правильным экранированием
@@ -1123,15 +1126,11 @@ order_conversation = ConversationHandler(
     per_message=False
 )
 
-# Основной блок запуска бота
 if __name__ == '__main__':
     print("Запуск бота...")
 
-    # Инициализация приложения Telegram
-    application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
-
     # Установка вебхука для получения обновлений
-    webhook_url = "https://vodo-ley.onrender.com"  # Замените <ваш-домен> на ваш реальный URL
+    webhook_url = "https://vodo-ley.onrender.com"  # Замените на ваш реальный URL
     try:
         print(f"Установка вебхука на {webhook_url}...")
         application.bot.set_webhook(url=webhook_url)
