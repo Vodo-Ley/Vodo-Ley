@@ -1078,6 +1078,7 @@ async def set_webhook(application, webhook_url):
 
     # Запуск сервера FastAPI для приема вебхуков
     port = int(os.environ.get("PORT", 8000))
+    print(f"Запуск сервера FastAPI на порту {port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
     # Запускаем FastAPI в отдельном потоке
