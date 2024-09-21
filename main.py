@@ -1052,11 +1052,11 @@ if __name__ == '__main__':
     # Инициализация Telegram бота
     application = ApplicationBuilder().token(telegram_token).build()
 
-    # Установка вебхука для получения обновлений
-    webhook_url = "https://vodo-ley.onrender.com"  # Замените на ваш реальный URL
+    # Асинхронная установка вебхука для получения обновлений
+async def set_webhook(application, webhook_url):
     try:
         print(f"Установка вебхука на {webhook_url}...")
-        application.bot.set_webhook(url=webhook_url)
+        await application.bot.set_webhook(url=webhook_url)
         print("Вебхук установлен.")
     except Exception as e:
         print(f"Ошибка установки вебхука: {e}")
@@ -1084,4 +1084,4 @@ if __name__ == '__main__':
     threading.Thread(target=run_fastapi).start()
     
     # Запуск Telegram Bot в основном потоке
-    asyncio.run(run_telegram_bot())
+    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
