@@ -1054,6 +1054,20 @@ order_conversation = ConversationHandler(
 # Основной блок запуска бота
 if __name__ == '__main__':
     print("Запуск бота...")
+    
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Если loop уже запущен, используем его для запуска main()
+            loop.create_task(main())
+        else:
+            # Если нет, запускаем через asyncio.run()
+            asyncio.run(main())
+    except RuntimeError as e:
+        # Если event loop не существует, создаем новый и запускаем main()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main())
 
     # Инициализация приложения Telegram
     application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
