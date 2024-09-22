@@ -77,8 +77,8 @@ async def main():
     await application.bot.delete_webhook(drop_pending_updates=True)
     print("Webhook удален. Запуск поллинга...")
     
-    # Вместо run_polling, используем create_task
-    asyncio.create_task(application.run_polling(drop_pending_updates=True))
+    # Запуск поллинга в текущем event loop
+    await application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
 # Обновленная функция для отправки финального уведомления с правильным экранированием
@@ -1235,10 +1235,10 @@ if __name__ == '__main__':
         loop = asyncio.get_event_loop()
         if not loop.is_running():
             print("Запуск нового event loop.")
-            asyncio.run(main())
+            loop.run_until_complete(main())  # Используем существующий loop для выполнения main()
         else:
             print("Event loop уже запущен. Добавляем main в существующий loop.")
-            asyncio.ensure_future(main())
+            asyncio.ensure_future(main())  # Добавляем main в уже запущенный loop
     except RuntimeError as e:
         print(f"Ошибка в управлении event loop: {e}")
 
