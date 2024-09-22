@@ -9,7 +9,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
-    Defaults,
 )
 import uvicorn
 from fastapi import FastAPI, Request
@@ -32,12 +31,11 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
-# Определение FastAPI приложения
+# Инициализация FastAPI приложения
 app = FastAPI()
 
 @app.get("/")
 async def root():
-    print("Корневой маршрут запрошен")
     return {"message": "Hello, world!"}
 
 @app.post("/")
@@ -45,138 +43,70 @@ async def webhook(request: Request):
     try:
         json_data = await request.json()
         update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
-
-        # Подаем update в очередь обработчика, чтобы приложение могло обработать его
-        await application.update_queue.put(update)
+        await application.update_queue.put(update)  # Подаем update в очередь обработчика
     except Exception as e:
         print(f"Ошибка обработки вебхука: {e}")
     return {"status": "ok"}
 
-async def set_webhook():
-    webhook_url = "https://vodo-ley.onrender.com"
-    try:
-        # Проверяем текущее состояние вебхука
-        webhook_info = await application.bot.get_webhook_info()
-        if webhook_info.url != webhook_url:
-            success = await application.bot.set_webhook(url=webhook_url)
-            if success:
+# Основная функция для запуска сервера и бота
+async def main():
+    # Создаем кастомную сессию aiohttp
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10)) as session:
+        # Инициализация Telegram бота с кастомной сессией
+        application = (
+            ApplicationBuilder()
+            .token(telegram_token)
+            .http_session(session)
+            .build()
+        )
+
+        # Устанавливаем вебхук
+        webhook_url = "https://vodo-ley.onrender.com"
+        try:
+            webhook_info = await application.bot.get_webhook_info()
+            if webhook_info.url != webhook_url:
+                await application.bot.set_webhook(url=webhook_url)
                 print("Вебхук успешно установлен.")
             else:
-                print("Ошибка при установке вебхука.")
-        else:
-            print("Вебхук уже установлен.")
-    except Exception as e:
-        print(f"Ошибка при установке вебхука: {e}")
+                print("Вебхук уже установлен.")
+        except Exception as e:
+            print(f"Ошибка при установке вебхука: {e}")
 
-async def main():
-    # Инициализация сессии внутри асинхронной функции
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10)) as session:
-        # Инициализация бота с кастомной сессией
-        global application
-        application = ApplicationBuilder().token(telegram_token).session(session).build()
+        # Добавляем хендлеры в бота
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(CommandHandler('call_ai', call_ai))
+        application.add_handler(order_conversation)
 
-        # Установка вебхука
-        await set_webhook()
+        # Запускаем бота и сервер FastAPI параллельно
+        async with application:
+            await application.start()
+            await uvicorn.run(app, host="0.0.0.0", port=10000)
 
-        # Запуск FastAPI сервера в отдельном потоке
-        server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info"))
-
-        # Создаем асинхронную задачу для сервера FastAPI
-        server_task = asyncio.create_task(server.serve())
-
-        # Запуск Telegram бота
-        bot_task = asyncio.create_task(application.start())
-
-        # Ожидаем завершения обеих задач
-        await asyncio.gather(server_task, bot_task)
-
-@app.post("/")
-async def webhook(request: Request):
-    try:
-        json_data = await request.json()
-        update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
-
-        # Подаем update в очередь обработчика, чтобы приложение могло обработать его
-        await application.update_queue.put(update)
-    except Exception as e:
-        print(f"Ошибка обработки вебхука: {e}")
-    return {"status": "ok"}
-
-# Определяем и регистрируем хендлеры
+# Обработчики команд и диалогов (пример функции start)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("[LOG] Вызвана команда /start")  # Логируем вызов команды
-    context.user_data.clear()
-    context.user_data['prices'] = get_prices_from_sheet('uk')  # Загружаем украинский прайс-лист как дефолт
-
-    # Создание клавиатуры для выбора языка и начала разговора
-    start_keyboard = ReplyKeyboardMarkup([
-        ["Старт розмови з Vodo.Ley"], 
-        ["Старт разговора с Vodo.Ley"]
-    ], one_time_keyboard=True)
-
-    # Отправка сообщения с выбором кнопки для начала разговора
     await update.message.reply_text(
-        "Вітаємо! Оберіть мову та розпочніть розмову, натиснувши на відповідну кнопку:",
-        reply_markup=start_keyboard
+        "Добро пожаловать! Нажмите /call_ai, чтобы начать разговор с ИИ."
     )
-    return LANGUAGE
 
-# Пример асинхронной задачи, которая создает несколько параллельных запросов
-async def send_multiple_messages():
-    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 1")
-    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 2")
+async def call_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Вы подключены к искусственному интеллекту. Задайте ваш вопрос."
+    )
 
-# Пример использования задержки между запросами
-async def send_multiple_messages():
-    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 1")
-    await asyncio.sleep(0.1)  # Небольшая задержка между запросами
-    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 2")
+# Определяем диалоговые хендлеры
+order_conversation = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={
+        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
+        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
+    },
+    fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
+    per_message=False,
+)
 
-async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_choice = update.message.text.strip().lower()
-    print(f"[LOG] Вызов set_language с выбором: {user_choice}")  # Логируем вызов
-
-    if user_choice == "старт розмови з vodo.ley":
-        context.user_data['language'] = 'uk'
-        context.user_data['prices'] = get_prices_from_sheet('uk')
-        await update.message.reply_text(
-            "Мова встановлена на українську. Давайте розпочнемо!",
-        )
-    elif user_choice == "старт разговора с vodo.ley":
-        context.user_data['language'] = 'ru'
-        context.user_data['prices'] = get_prices_from_sheet('ru')
-        await update.message.reply_text(
-            "Язык установлен на русский. Давайте начнем!",
-        )
-    else:
-        await update.message.reply_text("Будь ласка, оберіть один із варіантів: Старт розмови з Vodo.Ley або Старт разговора с Vodo.Ley.")
-        return LANGUAGE
-
-    # Переход к выбору типа услуги
-    if context.user_data['language'] == 'uk':
-        await update.message.reply_text("Виберіть тип послуги: 1 - Доставка, 2 - Самовивіз.")
-    else:
-        await update.message.reply_text("Выберите тип услуги: 1 - Доставка, 2 - Самовывоз.")
-    
-    return SERVICE_TYPE
-
-async def call_ai(update: Update, context):
-    print("[LOG] Вызвана команда /call_ai")  # Логируем вызов команды
-    language = context.user_data.get('language', 'uk')
-    print(f"[LOG] Язык для ИИ: {language}")
-    # Приветственное сообщение
-    if language == 'uk':
-        welcome_message = "Привіт! Я штучний інтелект і готовий допомогти вам. Ви можете задати будь-яке питання, і я спробую дати вам відповідь."
-    else:
-        welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
-    try:
-        await update.message.reply_text(welcome_message)
-        print("[LOG] Приветственное сообщение отправлено.")
-    except Exception as e:
-        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
-    context.user_data['state'] = GENERAL  # Добавлено логирование состояния пользователя
-    print("[LOG] Переход в состояние GENERAL.")
-    return GENERAL
+# Запуск основного цикла
+if __name__ == '__main__':
+    asyncio.run(main())
 
 # Функция для ограничения частоты запросов
 def rate_limiter():
@@ -1126,7 +1056,4 @@ application = ApplicationBuilder().token(telegram_token).session(session).build(
 application.add_handler(order_conversation)  # Обработчик диалога
 application.add_handler(CommandHandler('call_ai', call_ai))  # Обработчик команды /call_ai
 application.add_handler(CommandHandler('start', start))  # Обработчик команды /start
-
-if __name__ == '__main__':
-    asyncio.run(main())
     
