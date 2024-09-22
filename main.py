@@ -83,20 +83,22 @@ async def main():
 
 def start_bot():
     try:
-        # Проверяем, существует ли активный event loop и работает ли он
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Если event loop уже запущен, создаем задачу в текущем loop
-            print("Добавляем задачу main() в уже работающий event loop.")
-            loop.create_task(main())
-        else:
-            # Если event loop не запущен, создаем и запускаем новый loop
-            print("Запуск нового event loop с asyncio.run().")
-            asyncio.run(main())
-    except RuntimeError as e:
-        print(f"Ошибка управления event loop: {e}")
+        # Проверяем, существует ли активный event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                print("Event loop уже запущен. Добавляем задачу main() в существующий event loop.")
+                loop.create_task(main())
+            else:
+                print("Запуск нового event loop с loop.run_until_complete().")
+                loop.run_until_complete(main())
+        except RuntimeError as e:
+            print(f"RuntimeError: {e}. Попробуем создать новый event loop.")
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(main())
     except Exception as e:
-        print(f"Общая ошибка: {e}")
+        print(f"Ошибка запуска бота: {e}")
 
 # Обновленная функция для отправки финального уведомления с правильным экранированием
 async def send_final_notification(update, context):
