@@ -137,19 +137,16 @@ async def call_ai(update: Update, context):
     print("[LOG] Вызвана команда /call_ai")  # Логируем вызов команды
     language = context.user_data.get('language', 'uk')
     print(f"[LOG] Язык для ИИ: {language}")
-
     # Приветственное сообщение
     if language == 'uk':
         welcome_message = "Привіт! Я штучний інтелект і готовий допомогти вам. Ви можете задати будь-яке питання, і я спробую дати вам відповідь."
     else:
         welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
-
     try:
-    await update.message.reply_text(welcome_message)
-    print("[LOG] Приветственное сообщение отправлено.")
-except Exception as e:
-    print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
-
+        await update.message.reply_text(welcome_message)
+        print("[LOG] Приветственное сообщение отправлено.")
+    except Exception as e:
+        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
     context.user_data['state'] = GENERAL  # Добавлено логирование состояния пользователя
     print("[LOG] Переход в состояние GENERAL.")
     return GENERAL
