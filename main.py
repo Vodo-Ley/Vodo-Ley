@@ -64,16 +64,17 @@ async def root():
     return {"message": "Hello, world!"}
 
 @app.post("/")
-async def webhook(request: Request):
-    json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
-    
-    # Подаем update в очередь обработчика, чтобы приложение могло обработать его
-    await application.update_queue.put(update)
-    
-    return {"status": "ok"}
+async def set_webhook():
+    webhook_url = "https://vodo-ley.onrender.com"  # Убедитесь, что это ваш правильный URL
+    try:
+        success = await application.bot.set_webhook(url=webhook_url)
+        if success:
+            print("Вебхук успешно установлен.")
+        else:
+            print("Ошибка при установке вебхука.")
+    except Exception as e:
+        print(f"Ошибка при установке вебхука: {e}")
 
-# Определение функции для установки вебхука
 @app.post("/")
 async def webhook(request: Request):
     try:
