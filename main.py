@@ -9,6 +9,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
+    Defaults,
 )
 import uvicorn
 from fastapi import FastAPI, Request
@@ -30,12 +31,6 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
-
-# Настройка сессии aiohttp
-session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10))  # limit - это размер пула подключений
-
-# Инициализация бота с кастомной сессией
-application = ApplicationBuilder().token(telegram_token).session(session).build()
 
 # Определение FastAPI приложения
 app = FastAPI()
@@ -74,7 +69,12 @@ async def set_webhook():
         print(f"Ошибка при установке вебхука: {e}")
 
 async def main():
-    try:
+    # Инициализация сессии внутри асинхронной функции
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10)) as session:
+        # Инициализация бота с кастомной сессией
+        global application
+        application = ApplicationBuilder().token(telegram_token).session(session).build()
+
         # Установка вебхука
         await set_webhook()
 
@@ -89,9 +89,6 @@ async def main():
 
         # Ожидаем завершения обеих задач
         await asyncio.gather(server_task, bot_task)
-    finally:
-        # Закрываем сессию после завершения работы
-        await session.close()
 
 @app.post("/")
 async def webhook(request: Request):
