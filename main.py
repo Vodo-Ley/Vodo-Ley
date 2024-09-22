@@ -74,16 +74,17 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # Определение функции для установки вебхука
-async def set_webhook():
-    webhook_url = "https://vodo-ley.onrender.com"
+@app.post("/")
+async def webhook(request: Request):
     try:
-        success = await application.bot.set_webhook(url=webhook_url)
-        if success:
-            print("Вебхук успешно установлен.")
-        else:
-            print("Ошибка при установке вебхука.")
+        json_data = await request.json()
+        update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
+
+        # Подаем update в очередь обработчика, чтобы приложение могло обработать его
+        await application.update_queue.put(update)
     except Exception as e:
-        print(f"Ошибка при установке вебхука: {e}")
+        print(f"Ошибка обработки вебхука: {e}")
+    return {"status": "ok"}
 
 # Определяем и регистрируем хендлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1095,13 +1096,16 @@ order_conversation = ConversationHandler(
 application = ApplicationBuilder().token(telegram_token).build()
 
 # Добавление обработчиков
-application.add_handler(order_conversation)
-application.add_handler(CommandHandler('call_ai', call_ai))
+application.add_handler(order_conversation)  # Обработчик диалога
+application.add_handler(CommandHandler('call_ai', call_ai))  # Обработчик команды /call_ai
+application.add_handler(CommandHandler('start', start))  # Обработчик команды /start
 
 if __name__ == '__main__':
     print("[LOG] Запуск FastAPI сервера")
+    
     # Устанавливаем вебхук
-    asyncio.run(set_webhook())
+    asyncio.run(set_webhook())  # Устанавливаем вебхук до запуска сервера
     
     # Запуск FastAPI приложения
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
