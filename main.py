@@ -34,6 +34,9 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
+# Глобальная переменная для контроля первого запуска
+bot_started = False
+
 # Финальные уведомления без экранирования
 FINAL_NOTIFICATION_UK_RAW = (
     "Замовлення на доставку день-день приймаються до 16:00\n"
@@ -82,6 +85,12 @@ async def main():
     print("Бот запущен и ожидает сообщений.")
 
 def start_bot():
+    global bot_started  # Используем глобальную переменную для проверки первого запуска
+    if bot_started:
+        print("Бот уже запущен. Второй запуск предотвращен.")
+        return
+    bot_started = True
+
     try:
         # Проверяем, существует ли активный event loop
         try:
@@ -99,6 +108,7 @@ def start_bot():
             new_loop.run_until_complete(main())
     except Exception as e:
         print(f"Ошибка запуска бота: {e}")
+
 
 # Обновленная функция для отправки финального уведомления с правильным экранированием
 async def send_final_notification(update, context):
