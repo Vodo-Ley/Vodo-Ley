@@ -1230,7 +1230,19 @@ order_conversation = ConversationHandler(
     per_message=False
 )
 
-# Удалите всю логику проверки loop и просто запустите основную функцию через asyncio.run()
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        # Получаем текущий event loop, если он существует
+        loop = asyncio.get_event_loop()
+        
+        if loop.is_running():
+            # Если event loop уже запущен, добавляем задачу main в него
+            print("Event loop уже запущен. Добавляем main в существующий loop.")
+            loop.create_task(main())
+        else:
+            # Если event loop не запущен, запускаем его через asyncio.run
+            print("Запуск нового event loop.")
+            asyncio.run(main())
+    except RuntimeError as e:
+        print(f"Ошибка в управлении event loop: {e}")
 
