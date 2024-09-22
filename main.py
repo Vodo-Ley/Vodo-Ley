@@ -9,6 +9,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
+    Defaults,
 )
 import uvicorn
 from fastapi import FastAPI, Request
@@ -65,15 +66,36 @@ async def root():
 
 @app.post("/")
 async def set_webhook():
-    webhook_url = "https://vodo-ley.onrender.com"  # Убедитесь, что это ваш правильный URL
+    webhook_url = "https://vodo-ley.onrender.com"
     try:
-        success = await application.bot.set_webhook(url=webhook_url)
-        if success:
-            print("Вебхук успешно установлен.")
+        # Проверяем текущее состояние вебхука
+        webhook_info = await application.bot.get_webhook_info()
+        if webhook_info.url != webhook_url:
+            success = await application.bot.set_webhook(url=webhook_url)
+            if success:
+                print("Вебхук успешно установлен.")
+            else:
+                print("Ошибка при установке вебхука.")
         else:
-            print("Ошибка при установке вебхука.")
+            print("Вебхук уже установлен.")
     except Exception as e:
         print(f"Ошибка при установке вебхука: {e}")
+
+async def main():
+    # Установка вебхука
+    await set_webhook()
+
+    # Запуск FastAPI сервера в отдельном потоке
+    server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info"))
+
+    # Создаем асинхронную задачу для сервера FastAPI
+    server_task = asyncio.create_task(server.serve())
+
+    # Запуск Telegram бота
+    bot_task = asyncio.create_task(application.start())
+
+    # Ожидаем завершения обеих задач
+    await asyncio.gather(server_task, bot_task)
 
 @app.post("/")
 async def webhook(request: Request):
@@ -105,6 +127,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=start_keyboard
     )
     return LANGUAGE
+
+# Пример асинхронной задачи, которая создает несколько параллельных запросов
+async def send_multiple_messages():
+    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 1")
+    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 2")
+
+# Пример использования задержки между запросами
+async def send_multiple_messages():
+    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 1")
+    await asyncio.sleep(0.1)  # Небольшая задержка между запросами
+    await application.bot.send_message(chat_id=GROUP_CHAT_ID, text="Сообщение 2")
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_choice = update.message.text.strip().lower()
@@ -1093,8 +1126,8 @@ order_conversation = ConversationHandler(
     per_message=False
 )
 
-# Инициализация Telegram бота
-application = ApplicationBuilder().token(telegram_token).build()
+# Увеличиваем количество соединений в пуле
+application = ApplicationBuilder().token(telegram_token).defaults(Defaults(pool_size=10)).build()
 
 # Добавление обработчиков
 application.add_handler(order_conversation)  # Обработчик диалога
@@ -1102,11 +1135,5 @@ application.add_handler(CommandHandler('call_ai', call_ai))  # Обработч�
 application.add_handler(CommandHandler('start', start))  # Обработчик команды /start
 
 if __name__ == '__main__':
-    print("[LOG] Запуск FastAPI сервера")
+    asyncio.run(main())
     
-    # Устанавливаем вебхук
-    asyncio.run(set_webhook())  # Устанавливаем вебхук до запуска сервера
-    
-    # Запуск FastAPI приложения
-    uvicorn.run(app, host="0.0.0.0", port=10000)
-
