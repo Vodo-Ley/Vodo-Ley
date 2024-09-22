@@ -117,21 +117,6 @@ async def call_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Вы подключены к искусственному интеллекту. Задайте ваш вопрос."
     )
 
-# Определяем диалоговые хендлеры
-order_conversation = ConversationHandler(
-    entry_points=[CommandHandler('start', start)],
-    states={
-        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
-        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
-    },
-    fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
-    per_message=False,
-)
-
-# Запуск основного цикла
-if __name__ == '__main__':
-    asyncio.run(main())
-
 # Функция для ограничения частоты запросов
 def rate_limiter():
     print("[LOG] Ожидание 1 секунду перед отправкой следующего запроса...")
@@ -1069,4 +1054,18 @@ application = ApplicationBuilder().token(telegram_token).session(session).build(
 application.add_handler(order_conversation)  # Обработчик диалога
 application.add_handler(CommandHandler('call_ai', call_ai))  # Обработчик команды /call_ai
 application.add_handler(CommandHandler('start', start))  # Обработчик команды /start
-    
+
+# Определяем диалоговые хендлеры
+order_conversation = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={
+        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
+        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
+    },
+    fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
+    per_message=False,
+)
+
+# Запуск основного цикла
+if __name__ == '__main__':
+    asyncio.run(main())
