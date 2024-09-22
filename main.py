@@ -9,7 +9,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
-    Defaults,
 )
 import uvicorn
 from fastapi import FastAPI, Request
@@ -38,39 +37,6 @@ session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10))  # lim
 # Инициализация бота с кастомной сессией
 application = ApplicationBuilder().token(telegram_token).session(session).build()
 
-session = aiohttp.ClientSession(
-    connector=aiohttp.TCPConnector(limit=10),  # Пул подключений
-    timeout=aiohttp.ClientTimeout(total=30)    # Время ожидания (в секундах)
-)
-
-async def close_session():
-await session.close()
-
-# Финальные уведомления без экранирования
-FINAL_NOTIFICATION_UK_RAW = (
-    "Замовлення на доставку день-день приймаються до 16:00\n"
-    "Ми знаходимося за адресою Шевченка 29А\n"
-    "Графік роботи пункта розлива води 08:30-19:00\n"
-    "Наш номер телефона - 0672807573 Viber, Telegram\n"
-    "Ми завершуємо наш діалог, для відновлення чату клацніть /start\n"
-    "Ми раді Вам та хочемо надати бонус від нас, клацніть /call_ai та до Вас підключиться ШІ допоможе у всіх цікавлячих Вас питаннях."
-)
-
-FINAL_NOTIFICATION_RU_RAW = (
-    "Заказы на доставку день-день принимаются до 16:00\n"
-    "Мы находимся по адресу Шевченка 29А\n"
-    "График работы пункта разлива воды 08:30-19:00\n"
-    "Наш номер телефона - 0672807573 Viber, Telegram\n"
-    "Мы завершаем наш диалог, для восстановления чата нажмите /start\n"
-    "Мы рады Вам и хотим предоставить бонус от нас, нажмите /call_ai и к Вам подключится ИИ поможет во всех интересующих Вас вопросах."
-)
-
-# Функция для отправки финального уведомления с правильным экранированием
-def escape_markdown(text):
-    # Экранирует символы, которые могут вызвать ошибку в Markdown.
-    escape_chars = r'_[]()~`>#+-=|{}!\\.'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
-
 # Определение FastAPI приложения
 app = FastAPI()
 
@@ -80,6 +46,17 @@ async def root():
     return {"message": "Hello, world!"}
 
 @app.post("/")
+async def webhook(request: Request):
+    try:
+        json_data = await request.json()
+        update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
+
+        # Подаем update в очередь обработчика, чтобы приложение могло обработать его
+        await application.update_queue.put(update)
+    except Exception as e:
+        print(f"Ошибка обработки вебхука: {e}")
+    return {"status": "ok"}
+
 async def set_webhook():
     webhook_url = "https://vodo-ley.onrender.com"
     try:
