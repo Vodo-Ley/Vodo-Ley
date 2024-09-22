@@ -60,27 +60,35 @@ app = FastAPI()
 
 @app.get("/")
 async def root():
+    print("Корневой маршрут запрошен")
     return {"message": "Hello, world!"}
 
 @app.post("/")
 async def webhook(request: Request):
     json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)
-    await application.update_queue.put(update)
+    update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
+    context = await application.get_context(update)  # Получаем context для текущего update
+    
+    # Вызываем обработку
+    await handle_request(update, context)
+    
     return {"status": "ok"}
 
 # Определение функции для установки вебхука
 async def set_webhook():
     webhook_url = "https://vodo-ley.onrender.com"
     try:
-        await application.bot.set_webhook(url=webhook_url)
-        print("Вебхук успешно установлен.")
+        success = await application.bot.set_webhook(url=webhook_url)
+        if success:
+            print("Вебхук успешно установлен.")
+        else:
+            print("Ошибка при установке вебхука.")
     except Exception as e:
         print(f"Ошибка при установке вебхука: {e}")
 
 # Определяем и регистрируем хендлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Очистка данных пользователя и загрузка прайсов
+    print("[LOG] Вызвана команда /start")  # Логируем вызов команды
     context.user_data.clear()
     context.user_data['prices'] = get_prices_from_sheet('uk')  # Загружаем украинский прайс-лист как дефолт
 
@@ -126,7 +134,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SERVICE_TYPE
 
 async def call_ai(update: Update, context):
-    print("[LOG] Команда /call_ai вызвана.")
+    print("[LOG] Вызвана команда /call_ai")  # Логируем вызов команды
     language = context.user_data.get('language', 'uk')
     print(f"[LOG] Язык для ИИ: {language}")
 
@@ -137,11 +145,10 @@ async def call_ai(update: Update, context):
         welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
 
     try:
-        print("[LOG] Отправка приветственного сообщения...")
-        await update.message.reply_text(welcome_message)
-        print("[LOG] Приветственное сообщение отправлено.")
-    except Exception as e:
-        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
+    await update.message.reply_text(welcome_message)
+    print("[LOG] Приветственное сообщение отправлено.")
+except Exception as e:
+    print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
 
     context.user_data['state'] = GENERAL  # Добавлено логирование состояния пользователя
     print("[LOG] Переход в состояние GENERAL.")
@@ -234,6 +241,46 @@ async def handle_gpt_response(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Остаемся в состоянии GENERAL для дальнейшего общения
     print("[LOG] Ожидание следующего вопроса в состоянии GENERAL.")
     return GENERAL
+
+async def handle_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # Основной код для обработки команд или сообщений
+        # Здесь вы можете добавить логику обработки сообщений, команд или любых других данных из update
+        if update.message:  # Если это сообщение
+            if update.message.text:
+                print(f"[LOG] Получено сообщение: {update.message.text}")
+                # Обработка команд или сообщений
+                # Например, если команда /start, вызываем соответствующую функцию
+                if update.message.text == '/start':
+                    await start(update, context)
+                elif update.message.text == '/call_ai':
+                    await call_ai(update, context)
+                else:
+                    # Если это не команда, обрабатываем как текстовое сообщение
+                    await handle_gpt_response(update, context)
+            else:
+                print("[LOG] Получено сообщение без текста.")
+        
+        elif update.callback_query:  # Если это callback-запрос (нажатие на кнопки InlineKeyboard)
+            print(f"[LOG] Получен callback-запрос с данными: {update.callback_query.data}")
+            await handle_callback_query(update.callback_query, context)
+        
+        else:
+            print("[LOG] Неизвестный тип update.")
+
+    except Exception as e:
+        print(f"[ERROR] Ошибка в асинхронной функции: {e}")
+
+# Пример обработчика callback-запросов (если используется InlineKeyboard)
+async def handle_callback_query(callback_query, context):
+    try:
+        # Обработка данных из callback-запроса
+        if callback_query.data == 'repeat_order':
+            await repeat_order(callback_query, context)
+        else:
+            await callback_query.answer("Неизвестный запрос.")
+    except Exception as e:
+        print(f"[ERROR] Ошибка при обработке callback-запроса: {e}")
 
 async def log_state_on_each_message(update: Update, context):
     state = context.user_data.get('state')
@@ -1055,11 +1102,10 @@ application = ApplicationBuilder().token(telegram_token).build()
 application.add_handler(order_conversation)
 application.add_handler(CommandHandler('call_ai', call_ai))
 
-# Запуск вебхука и сервера
 if __name__ == '__main__':
+    print("[LOG] Запуск FastAPI сервера")
     # Устанавливаем вебхук
     asyncio.run(set_webhook())
-
+    
     # Запуск FastAPI приложения
     uvicorn.run(app, host="0.0.0.0", port=10000)
-
