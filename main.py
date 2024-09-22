@@ -42,6 +42,8 @@ session = aiohttp.ClientSession(
     connector=aiohttp.TCPConnector(limit=10),  # Пул подключений
     timeout=aiohttp.ClientTimeout(total=30)    # Время ожидания (в секундах)
 )
+
+async def close_session():
 await session.close()
 
 # Финальные уведомления без экранирования
@@ -95,20 +97,24 @@ async def set_webhook():
         print(f"Ошибка при установке вебхука: {e}")
 
 async def main():
-    # Установка вебхука
-    await set_webhook()
+    try:
+        # Установка вебхука
+        await set_webhook()
 
-    # Запуск FastAPI сервера в отдельном потоке
-    server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info"))
+        # Запуск FastAPI сервера в отдельном потоке
+        server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info"))
 
-    # Создаем асинхронную задачу для сервера FastAPI
-    server_task = asyncio.create_task(server.serve())
+        # Создаем асинхронную задачу для сервера FastAPI
+        server_task = asyncio.create_task(server.serve())
 
-    # Запуск Telegram бота
-    bot_task = asyncio.create_task(application.start())
+        # Запуск Telegram бота
+        bot_task = asyncio.create_task(application.start())
 
-    # Ожидаем завершения обеих задач
-    await asyncio.gather(server_task, bot_task)
+        # Ожидаем завершения обеих задач
+        await asyncio.gather(server_task, bot_task)
+    finally:
+        # Закрываем сессию после завершения работы
+        await session.close()
 
 @app.post("/")
 async def webhook(request: Request):
