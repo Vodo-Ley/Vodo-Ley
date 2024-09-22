@@ -131,6 +131,26 @@ def get_latest_gpt_model():
         # Возвращаем дефолтную модель, если не удалось определить последнюю версию
         return "gpt-4"
 
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_choice = update.message.text.strip().lower()
+    print(f"[LOG] Вызов set_language с выбором: {user_choice}")  # Логируем вызов
+
+    if user_choice == "старт розмови з vodo.ley":
+        context.user_data['language'] = 'uk'
+        context.user_data['prices'] = get_prices_from_sheet('uk')
+        await update.message.reply_text(
+            "Мова встановлена на українську. Давайте розпочнемо!",
+        )
+    elif user_choice == "старт разговора с vodo.ley":
+        context.user_data['language'] = 'ru'
+        context.user_data['prices'] = get_prices_from_sheet('ru')
+        await update.message.reply_text(
+            "Язык установлен на русский. Давайте начнем!",
+        )
+    else:
+        await update.message.reply_text("Будь ласка, оберіть один із варіантів: Старт розмови з Vodo.Ley або Старт разговора с Vodo.Ley.")
+        return LANGUAGE
+
 # Обработчик ответа GPT
 async def handle_gpt_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("[LOG] Обработчик handle_gpt_response вызван.")
@@ -1037,17 +1057,6 @@ def get_prices_from_sheet(language):
 
     except Exception as e:
         return None
-
-# Обработчик состояния LANGAUGE и начало разговора
-order_conversation = ConversationHandler(
-    entry_points=[CommandHandler('start', start)],
-    states={
-        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
-        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
-    },
-    fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
-    per_message=False
-)
 
 # Увеличиваем количество соединений в пуле
 application = ApplicationBuilder().token(telegram_token).session(session).build()
