@@ -38,6 +38,9 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
+# Инициализация FastAPI приложения
+app = FastAPI()
+
 # Финальные уведомления без экранирования
 FINAL_NOTIFICATION_UK_RAW = (
     "Замовлення на доставку день-день приймаються до 16:00\n"
@@ -70,14 +73,12 @@ app = FastAPI()
 async def root():
     return {"message": "Hello, world!"}
 
-# Определение функции set_webhook
-async def set_webhook(application, webhook_url):
-    try:
-        print(f"Установка вебхука на {webhook_url}...")
-        await application.bot.set_webhook(url=webhook_url)
-        print("Вебхук установлен.")
-    except Exception as e:
-        print(f"Ошибка установки вебхука: {e}")
+@app.post("/")
+async def webhook(request: Request):
+    json_data = await request.json()
+    update = telegram.Update.de_json(json_data, application.bot)
+    await application.update_queue.put(update)
+    return {"status": "ok"}
 
 @app.get("/", include_in_schema=False)
 async def read_root():
@@ -87,13 +88,21 @@ async def read_root():
 async def head_root():
     return {"message": "Hello, world!"}
 
+# Определение функции для установки вебхука
+async def set_webhook():
+    webhook_url = "https://vodo-ley.onrender.com"
+    try:
+        await application.bot.set_webhook(url=webhook_url)
+        print("Вебхук успешно установлен.")
+    except Exception as e:
+        print(f"Ошибка при установке вебхука: {e}")
 # Функция для запуска FastAPI сервера
 def run_fastapi():
     config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
     server = uvicorn.Server(config)
     server.run()
 
-# Обработка команды /start
+# Определяем и регистрируем хендлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Очистка данных пользователя и загрузка прайсов
     context.user_data.clear()
@@ -1079,7 +1088,7 @@ if __name__ == '__main__':
     application = ApplicationBuilder().token(telegram_token).build()
        
     # Добавление ваших ConversationHandlers и других обработчиков
-    application.add_handler(CommandHandler('start', start))
+   application.add_handler(CommandHandler('start', start))
 
     # Добавление командного обработчика для вызова AI
     print("Добавление обработчика для команды /call_ai...")
@@ -1092,12 +1101,10 @@ if __name__ == '__main__':
     # Установка вебхука
     asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
 
-    # Запуск сервера FastAPI для приема вебхуков (если используете вебхуки)
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
-    # Запуск бота на поллинге
-    # print("Бот запускается на поллинге...")
-    # application.run_polling(drop_pending_updates=True, timeout=30)
-    # print("Бот запущен и ожидает сообщений.")
+    if __name__ == '__main__':
+    # Устанавливаем вебхук
+    asyncio.run(set_webhook())
+    
+    # Запуск FastAPI приложения
+    uvicorn.run(app, host="0.0.0.0", port=10000)
 
