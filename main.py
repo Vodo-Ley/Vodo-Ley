@@ -1,4 +1,3 @@
-# Импорты и глобальные переменные
 import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -9,19 +8,12 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     filters,
-    CallbackQueryHandler,
     ContextTypes,
 )
-from time import sleep
-import re
-import os
 import uvicorn
-from openai import OpenAIError
-from fastapi import FastAPI
-import threading
-import requests
-import time
+from fastapi import FastAPI, Request
 import asyncio
+import time
 
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -37,9 +29,6 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
-
-# Инициализация FastAPI приложения
-app = FastAPI()
 
 # Финальные уведомления без экранирования
 FINAL_NOTIFICATION_UK_RAW = (
@@ -76,17 +65,9 @@ async def root():
 @app.post("/")
 async def webhook(request: Request):
     json_data = await request.json()
-    update = telegram.Update.de_json(json_data, application.bot)
+    update = Update.de_json(json_data, application.bot)
     await application.update_queue.put(update)
     return {"status": "ok"}
-
-@app.get("/", include_in_schema=False)
-async def read_root():
-    return {"message": "Hello, world!"}
-
-@app.head("/", include_in_schema=False)
-async def head_root():
-    return {"message": "Hello, world!"}
 
 # Определение функции для установки вебхука
 async def set_webhook():
@@ -96,11 +77,6 @@ async def set_webhook():
         print("Вебхук успешно установлен.")
     except Exception as e:
         print(f"Ошибка при установке вебхука: {e}")
-# Функция для запуска FastAPI сервера
-def run_fastapi():
-    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
-    server = uvicorn.Server(config)
-    server.run()
 
 # Определяем и регистрируем хендлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,15 +97,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return LANGUAGE
 
-    @app.post("/")
-    async def webhook(request: Request):
-    # Весь код внутри функции должен быть с отступами
-        json_data = await request.json()  # Отступ 4 пробела или 1 табуляция
-        update = telegram.Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-    return {"message": "Webhook received successfully"}
-
-# Обработка выбора кнопки и автоматическое определение языка
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_choice = update.message.text.strip().lower()
     print(f"[LOG] Вызов set_language с выбором: {user_choice}")  # Логируем вызов
@@ -180,9 +147,10 @@ async def call_ai(update: Update, context):
     print("[LOG] Переход в состояние GENERAL.")
     return GENERAL
 
-def set_user_state(context, state):
-    context.user_data['state'] = state
-    print(f"[LOG] Установлено состояние: {state}")
+# Функция для ограничения частоты запросов
+def rate_limiter():
+    print("[LOG] Ожидание 1 секунду перед отправкой следующего запроса...")
+    time.sleep(1)  # Убедитесь, что задержка не блокирует основной поток
 
 # Функция для получения последней доступной версии модели GPT
 def get_latest_gpt_model():
@@ -1073,38 +1041,25 @@ def get_prices_from_sheet(language):
 order_conversation = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
-        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],  # Обработка выбора языка и начала разговора
-        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],  # Обработчик состояния GENERAL
+        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
+        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
     },
     fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
     per_message=False
 )
 
-# Основной блок инициализации приложения и бота
+# Инициализация Telegram бота
+application = ApplicationBuilder().token(telegram_token).build()
+
+# Добавление обработчиков
+application.add_handler(order_conversation)
+application.add_handler(CommandHandler('call_ai', call_ai))
+
+# Запуск вебхука и сервера
 if __name__ == '__main__':
-    print("Запуск бота...")
-
-    # Инициализация Telegram бота
-    application = ApplicationBuilder().token(telegram_token).build()
-       
-    # Добавление ваших ConversationHandlers и других обработчиков
-   application.add_handler(CommandHandler('start', start))
-
-    # Добавление командного обработчика для вызова AI
-    print("Добавление обработчика для команды /call_ai...")
-    application.add_handler(CommandHandler('call_ai', call_ai))
-    print("CommandHandler для /call_ai добавлен.")
-
-    # Пауза для гарантии запуска сервера
-    time.sleep(5) 
-    
-    # Установка вебхука
-    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
-
-    if __name__ == '__main__':
     # Устанавливаем вебхук
     asyncio.run(set_webhook())
-    
+
     # Запуск FastAPI приложения
     uvicorn.run(app, host="0.0.0.0", port=10000)
 
