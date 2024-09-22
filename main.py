@@ -1,3 +1,4 @@
+# Импорты и глобальные переменные
 import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -14,6 +15,9 @@ from telegram.ext import (
 from time import sleep
 import re
 import os
+import uvicorn
+from openai import OpenAIError
+from fastapi import FastAPI
 import threading
 import requests
 import time
@@ -34,9 +38,6 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
-# Глобальная переменная для контроля первого запуска
-bot_started = False
-
 # Финальные уведомления без экранирования
 FINAL_NOTIFICATION_UK_RAW = (
     "Замовлення на доставку день-день приймаються до 16:00\n"
@@ -56,359 +57,119 @@ FINAL_NOTIFICATION_RU_RAW = (
     "Мы рады Вам и хотим предоставить бонус от нас, нажмите /call_ai и к Вам подключится ИИ поможет во всех интересующих Вас вопросах."
 )
 
-async def main():
-    print("Запуск бота...")
-    application = ApplicationBuilder().token(telegram_token).connect_timeout(30).build()
-    
-    # Добавляем ваши хендлеры и обработчики сюда
-    print("Добавление ConversationHandler...")
-    application.add_handler(order_conversation)
-    print("ConversationHandler добавлен.")
-    
-    print("Добавление обработчика для команды /call_ai...")
-    application.add_handler(CommandHandler('call_ai', call_ai))
-    print("CommandHandler для /call_ai добавлен.")
-    
-    print("Добавление обработчика для повторного заказа...")
-    application.add_handler(CallbackQueryHandler(repeat_order, pattern='repeat_order'))
-    print("CallbackQueryHandler добавлен.")
-    
-    print("Добавление универсального обработчика для всех текстовых сообщений...")
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response))
-    print("Универсальный обработчик для всех текстовых сообщений добавлен.")
-    
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    print("Webhook удален. Запуск поллинга...")
-    
-    # Запуск бота с поллингом
-    await application.run_polling(drop_pending_updates=True)
-    print("Бот запущен и ожидает сообщений.")
-
-def start_bot():
-    global bot_started  # Используем глобальную переменную для проверки первого запуска
-    if bot_started:
-        print("Бот уже запущен. Второй запуск предотвращен.")
-        return
-    bot_started = True
-
-    try:
-        # Проверяем, существует ли активный event loop
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                print("Event loop уже запущен. Добавляем задачу main() в существующий event loop.")
-                loop.create_task(main())
-            else:
-                print("Запуск нового event loop с loop.run_until_complete().")
-                loop.run_until_complete(main())
-        except RuntimeError as e:
-            print(f"RuntimeError: {e}. Попробуем создать новый event loop.")
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(main())
-    except Exception as e:
-        print(f"Ошибка запуска бота: {e}")
-
-
-# Обновленная функция для отправки финального уведомления с правильным экранированием
-async def send_final_notification(update, context):
-    language = context.user_data.get('language', 'uk')
-    final_notification_raw = FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
-    
-    # Экранируем только перед отправкой
-    final_notification = escape_markdown_v2(final_notification_raw)
-    await update.message.reply_text(final_notification, parse_mode='MarkdownV2')
-
-# Функция для получения прайсов из Google Sheets с учетом языка
-def get_prices_from_sheet(language):
-    try:
-        sheet = client.open('Прайс-лист').sheet1
-        data = sheet.get_all_records()
-
-        prices = {'water': {}, 'accessories': []}
-        name_column = 'Название (укр)' if language == 'uk' else 'Название (рус)'
-
-        def parse_price(value):
-            try:
-                return float(str(value).replace(',', '.'))
-            except ValueError:
-                return 0.0
-
-        for row in data:
-            item_type = row['Тип'].lower()
-            if item_type == 'water':
-                water_name = row[name_column].strip().lower()
-                prices['water'][water_name] = {
-                    'delivery': parse_price(row['Доставка']),
-                    'pickup': parse_price(row['Самовывоз'])
-                }
-            elif item_type in ['pump', 'container']:
-                prices['accessories'].append({
-                    'name': row[name_column].strip(),
-                    'delivery': parse_price(row['Доставка']),
-                    'pickup': parse_price(row['Самовывоз'])
-                })
-
-        return prices
-
-    except Exception as e:
-        return None
-
 # Функция для отправки финального уведомления с правильным экранированием
 def escape_markdown(text):
+    # Экранирует символы, которые могут вызвать ошибку в Markdown.
     escape_chars = r'_[]()~`>#+-=|{}!\\.'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-# Функция для вычисления стоимости заказа
-def calculate_costs(user_data):
-    #Вычисляет стоимость воды, аксессуаров и общую стоимость."""
-    water_cost_per_liter = user_data['water_cost_per_liter']
-    water_total_cost = float(user_data['water_amount']) * water_cost_per_liter
-    accessories_cost = sum(item['cost'] for item in user_data.get('selected_accessories', []))
-    
-    # Определяем стоимость подъема на этаж
-    floor = user_data.get('floor', '1')
-    
-    # Проверяем, если floor - строка "Приватний будинок" или "Частный дом"
-    if floor.lower() in ['приватний будинок', 'частный дом']:
-        floor_cost = 0  # Для частного дома подъем на этаж не требуется
-    else:
-        try:
-            floor_cost = calculate_floor_cost(int(floor))  # Используем нашу функцию для расчета стоимости
-        except ValueError:
-            floor_cost = 0  # На случай неверного ввода значения
-    
-    total_cost = water_total_cost + accessories_cost + floor_cost
-    return water_total_cost, accessories_cost, floor_cost, total_cost
+# Определение FastAPI приложения
+app = FastAPI()
 
-# Обновленная функция для отображения ассортимента аксессуаров
-def format_accessories_list(user_data, language):
-    accessories = user_data.get('selected_accessories', [])
-    if not accessories:
-        return "Без аксесуарів" if language == 'uk' else "Без аксессуаров"
-    
-    # Проверяем, что каждый элемент в списке является словарем
-    if isinstance(accessories, list) and all(isinstance(item, dict) for item in accessories):
-        return ', '.join(f"{item['name']} x{item['quantity']}" for item in accessories)
-    else:
-        return "Некорректные данные аксесуаров" if language == 'uk' else "Некорректные данные аксессуаров"
+@app.get("/")
+async def root():
+    return {"message": "Hello, world!"}
 
-# Исправленная функция для отображения полного списка ассортимента аксессуаров
-def format_accessories_list_detailed(accessories, language):
-    message = "Доступні аксесуари:\n" if language == 'uk' else "Доступные аксессуары:\n"
-    if isinstance(accessories, list) and all(isinstance(item, dict) for item in accessories):
-        for i, accessory in enumerate(accessories, start=1):
-            message += f"{i}. {accessory['name']} - {accessory['delivery']} грн\n"
-        message += "0. Не хочу аксесуари" if language == 'uk' else "0. Не хочу аксессуары"
-    else:
-        message += "Некорректные данные аксесуаров" if language == 'uk' else "Некорректные данные аксессуаров"
-    return message
+# Определение функции set_webhook
+async def set_webhook(application, webhook_url):
+    try:
+        print(f"Установка вебхука на {webhook_url}...")
+        await application.bot.set_webhook(url=webhook_url)
+        print("Вебхук установлен.")
+    except Exception as e:
+        print(f"Ошибка установки вебхука: {e}")
 
-def format_order_summary(user_data, water_total_cost, accessories_cost, floor_cost, total_cost):
-    language = user_data['language']
-    accessories_str = format_accessories_list(user_data, language)
+@app.get("/", include_in_schema=False)
+async def read_root():
+    return {"message": "Hello, world!"}
 
-    # Подготавливаем данные для экранирования
-    service_type = 'Доставка' if user_data['service_type'] == 'delivery' else 'Самовивіз' if language == 'uk' else 'Самовывоз'
-    water_type = user_data['water_type'].capitalize()
-    address = user_data['address']
-    phone = user_data['phone']
-    floor = user_data['floor']
-    water_amount = str(user_data['water_amount'])
-    water_total_cost_str = f"{water_total_cost:.1f}"
-    accessories_str = accessories_str
-    floor_cost_str = f"{floor_cost}"
-    total_cost_str = f"{total_cost:.1f}"
+@app.head("/", include_in_schema=False)
+async def head_root():
+    return {"message": "Hello, world!"}
 
-    # Формируем строку заказа без экранирования
-    if language == 'uk':
-        order_summary = (
-            f"*Нове замовлення:*\n"
-            f"Тип послуги: *{service_type}*\n"
-            f"Тип води: *{water_type}*\n"
-            f"Адреса: *{address}*\n"
-            f"Номер телефону: *{phone}*\n"
-            f"Кількість води: *{water_amount} л*\n"
-            f"Вартість води: *{water_total_cost_str} грн*\n"
-            f"Аксесуари: *{accessories_str}*\n"
-            f"Поверх/Тип будинку: *{floor}*\n"
-            f"Вартість підйому: *{floor_cost_str} грн*\n"
-            f"Загальна вартість: *{total_cost_str} грн*\n"
+# Функция для запуска FastAPI сервера
+def run_fastapi():
+    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    server.run()
+
+# Обработка команды /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Очистка данных пользователя и загрузка прайсов
+    context.user_data.clear()
+    context.user_data['prices'] = get_prices_from_sheet('uk')  # Загружаем украинский прайс-лист как дефолт
+
+    # Создание клавиатуры для выбора языка и начала разговора
+    start_keyboard = ReplyKeyboardMarkup([
+        ["Старт розмови з Vodo.Ley"], 
+        ["Старт разговора с Vodo.Ley"]
+    ], one_time_keyboard=True)
+
+    # Отправка сообщения с выбором кнопки для начала разговора
+    await update.message.reply_text(
+        "Вітаємо! Оберіть мову та розпочніть розмову, натиснувши на відповідну кнопку:",
+        reply_markup=start_keyboard
+    )
+    return LANGUAGE
+
+    @app.post("/")
+    async def webhook(request: Request):
+    # Весь код внутри функции должен быть с отступами
+        json_data = await request.json()  # Отступ 4 пробела или 1 табуляция
+        update = telegram.Update.de_json(json_data, application.bot)
+        await application.process_update(update)
+    return {"message": "Webhook received successfully"}
+
+# Обработка выбора кнопки и автоматическое определение языка
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_choice = update.message.text.strip().lower()
+    print(f"[LOG] Вызов set_language с выбором: {user_choice}")  # Логируем вызов
+
+    if user_choice == "старт розмови з vodo.ley":
+        context.user_data['language'] = 'uk'
+        context.user_data['prices'] = get_prices_from_sheet('uk')
+        await update.message.reply_text(
+            "Мова встановлена на українську. Давайте розпочнемо!",
+        )
+    elif user_choice == "старт разговора с vodo.ley":
+        context.user_data['language'] = 'ru'
+        context.user_data['prices'] = get_prices_from_sheet('ru')
+        await update.message.reply_text(
+            "Язык установлен на русский. Давайте начнем!",
         )
     else:
-        order_summary = (
-            f"*Новый заказ:*\n"
-            f"Тип услуги: *{service_type}*\n"
-            f"Тип воды: *{water_type}*\n"
-            f"Адрес: *{address}*\n"
-            f"Номер телефона: *{phone}*\n"
-            f"Количество воды: *{water_amount} л*\n"
-            f"Стоимость воды: *{water_total_cost_str} грн*\n"
-            f"Аксессуары: *{accessories_str}*\n"
-            f"Этаж/Тип дома: *{floor}*\n"
-            f"Стоимость подъема: *{floor_cost_str} грн*\n"
-            f"Общая стоимость: *{total_cost_str} грн*\n"
-        )
+        await update.message.reply_text("Будь ласка, оберіть один із варіантів: Старт розмови з Vodo.Ley або Старт разговора с Vodo.Ley.")
+        return LANGUAGE
 
-    # Логирование для отладки
-    print("Сформированный заказ:", order_summary)
-
-    return order_summary
-
-# Функция для вывода полного заказа после выбора аксессуаров
-async def handle_order_summary(update, context):
-    user_data = context.user_data
-    language = user_data['language']
-    water_total_cost, accessories_cost, floor_cost, total_cost = calculate_costs(user_data)
-    order_summary = format_order_summary(user_data, water_total_cost, accessories_cost, floor_cost, total_cost)
-    context.user_data['last_order'] = {
-        'order_summary': order_summary,
-        'final_notification': FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
-    }
-
-    # Логирование для отладки перед экранированием
-    print("Сформированный заказ до экранирования:", order_summary)
-
-    # Используем экранирование для Markdown
-    escaped_order_summary = escape_markdown(order_summary)
-
-    # Логирование после экранирования
-    print("Сформированный заказ после экранирования:", escaped_order_summary)
-
-    # Попробуем отправить сообщение пользователю с минимальным экранированием
-    try:
-        await update.message.reply_text(escaped_order_summary, parse_mode='Markdown')
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки сообщения: {e}")
-        # Если ошибка повторяется, отправим сообщение без экранирования
-        try:
-            await update.message.reply_text(order_summary)
-        except telegram.error.BadRequest as e:
-            print(f"Ошибка при отправке сообщения без экранирования: {e}")
-            await update.message.reply_text("Произошла ошибка при отправке сообщения. Пожалуйста, проверьте текст на наличие запрещенных символов.")
-        return
-
-    # Отправка сообщения в группу с минимальным экранированием
-    try:
-        await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=escaped_order_summary, parse_mode='Markdown')
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки сообщения в группу: {e}")
-        # Если ошибка повторяется, отправим сообщение без экранирования
-        try:
-            await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary)
-        except telegram.error.BadRequest as e:
-            print(f"Ошибка при отправке сообщения в группу без экранирования: {e}")
-            await update.message.reply_text("Произошла ошибка при отправке сообщения в группу. Пожалуйста, проверьте текст на наличие запрещенных символов.")
-        return
-
-    # Отправка финального уведомления
-    final_notification = context.user_data['last_order']['final_notification']
-
-    # Отправка финального уведомления пользователю
-    try:
-        await update.message.reply_text(final_notification)
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки финального уведомления: {e}")
-        await update.message.reply_text("Произошла ошибка при отправке финального уведомления.")
-
-    # Восстановим кнопку "Повторить заказ"
-    keyboard = [
-        [InlineKeyboardButton("Повторити замовлення" if language == 'uk' else "Повторить заказ", callback_data='repeat_order')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Переход к выбору типа услуги
+    if context.user_data['language'] == 'uk':
+        await update.message.reply_text("Виберіть тип послуги: 1 - Доставка, 2 - Самовивіз.")
+    else:
+        await update.message.reply_text("Выберите тип услуги: 1 - Доставка, 2 - Самовывоз.")
     
-    try:
-        await update.message.reply_text("Если вы хотите повторить заказ, нажмите на кнопку ниже:", reply_markup=reply_markup)
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки кнопки повторного заказа: {e}")
-        await update.message.reply_text("Произошла ошибка при отправке кнопки повторного заказа.")
+    return SERVICE_TYPE
 
-    return ConversationHandler.END
-
-# Вызов подробного списка аксессуаров в функции `handle_accessories_offer`:
-async def handle_accessories_offer(update: Update, context):
-    accessories_list = context.user_data['prices']['accessories']
+async def call_ai(update: Update, context):
+    print("[LOG] Команда /call_ai вызвана.")
     language = context.user_data.get('language', 'uk')
-    
-    accessories_message = format_accessories_list_detailed(accessories_list, language)
-    await update.message.reply_text(accessories_message)
-    
+    print(f"[LOG] Язык для ИИ: {language}")
+
+    # Приветственное сообщение
     if language == 'uk':
-        await update.message.reply_text("Виберіть аксесуар і кількість, наприклад: 1 2 (помпа механічна, 2 шт) або введіть 0, щоб пропустити.")
+        welcome_message = "Привіт! Я штучний інтелект і готовий допомогти вам. Ви можете задати будь-яке питання, і я спробую дати вам відповідь."
     else:
-        await update.message.reply_text("Выберите аксессуар и количество, например: 1 2 (механическая помпа, 2 шт) или введите 0, чтобы пропустить.")
-    
-    return ACCESSORIES_CHOICE  # Переход к выбору аксессуаров
+        welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
 
-async def repeat_order(update: Update, context):
-    query = update.callback_query
-    await query.answer()
-    last_order = context.user_data.get('last_order')
-
-    if not last_order:
-        await query.edit_message_text("Последний заказ не найден.")
-        return
-    
-    order_summary = last_order['order_summary']
-    
-    # Логирование перед отправкой сообщения
-    print("Повтор заказа перед отправкой:", order_summary)
-
-    # Отправляем сообщение пользователю с минимальным экранированием (Markdown)
     try:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=order_summary, parse_mode='Markdown')
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки сообщения: {e}")
-        # Если ошибка повторяется, отправим сообщение без экранирования
-        try:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=order_summary)
-        except telegram.error.BadRequest as e:
-            print(f"Ошибка при отправке сообщения без экранирования: {e}")
-            await query.edit_message_text("Произошла ошибка при отправке сообщения. Пожалуйста, проверьте текст на наличие запрещенных символов.")
-        return
-    
-    # Отправляем сообщение в группу с минимальным экранированием (Markdown)
-    try:
-        await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary, parse_mode='Markdown')
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки сообщения в группу: {e}")
-        # Если ошибка повторяется, отправим сообщение без экранирования
-        try:
-            await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary)
-        except telegram.error.BadRequest as e:
-            print(f"Ошибка при отправке сообщения в группу без экранирования: {e}")
-            await query.edit_message_text("Произошла ошибка при отправке сообщения в группу. Пожалуйста, проверьте текст на наличие запрещенных символов.")
-        return
-    
-    # Отправляем информационное сообщение пользователю
-    final_notification = last_order['final_notification']
-    try:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=final_notification)
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки финального уведомления: {e}")
-        await query.edit_message_text("Произошла ошибка при отправке финального уведомления.")
+        print("[LOG] Отправка приветственного сообщения...")
+        await update.message.reply_text(welcome_message)
+        print("[LOG] Приветственное сообщение отправлено.")
+    except Exception as e:
+        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
 
-    # Восстанавливаем кнопку "Повторить заказ"
-    keyboard = [
-        [InlineKeyboardButton("Повторити замовлення" if context.user_data['language'] == 'uk' else "Повторить заказ", callback_data='repeat_order')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    try:
-        await context.bot.send_message(chat_id=query.message.chat_id, text="Если вы хотите повторить заказ, нажмите на кнопку ниже:", reply_markup=reply_markup)
-    except telegram.error.BadRequest as e:
-        print(f"Ошибка отправки кнопки повторного заказа: {e}")
-        await query.edit_message_text("Произошла ошибка при отправке кнопки повторного заказа.")
-
-# Функция для ограничения частоты запросов
-def rate_limiter():
-    print("[LOG] Ожидание 1 секунду перед отправкой следующего запроса...")
-    sleep(1)  # Убедитесь, что задержка не блокирует основной поток
-
-# Обновленный метод для логирования состояния пользователя на каждом этапе
-def log_current_state(context, state_name):
-    print(f"[LOG] Текущее состояние: {state_name}")
-    print(f"[LOG] Данные пользователя: {context.user_data}")
+    context.user_data['state'] = GENERAL  # Добавлено логирование состояния пользователя
+    print("[LOG] Переход в состояние GENERAL.")
+    return GENERAL
 
 def set_user_state(context, state):
     context.user_data['state'] = state
@@ -773,31 +534,49 @@ async def handle_water_type(update: Update, context):
     
     return WATER_AMOUNT  # Переход к выбору количества воды
 
-# Обновленная функция для формирования строки с аксессуарами
+# Функция для вычисления стоимости заказа
+def calculate_costs(user_data):
+    #Вычисляет стоимость воды, аксессуаров и общую стоимость."""
+    water_cost_per_liter = user_data['water_cost_per_liter']
+    water_total_cost = float(user_data['water_amount']) * water_cost_per_liter
+    accessories_cost = sum(item['cost'] for item in user_data.get('selected_accessories', []))
+    
+    # Определяем стоимость подъема на этаж
+    floor = user_data.get('floor', '1')
+    
+    # Проверяем, если floor - строка "Приватний будинок" или "Частный дом"
+    if floor.lower() in ['приватний будинок', 'частный дом']:
+        floor_cost = 0  # Для частного дома подъем на этаж не требуется
+    else:
+        try:
+            floor_cost = calculate_floor_cost(int(floor))  # Используем нашу функцию для расчета стоимости
+        except ValueError:
+            floor_cost = 0  # На случай неверного ввода значения
+            
+    total_cost = water_total_cost + accessories_cost + floor_cost
+    return water_total_cost, accessories_cost, floor_cost, total_cost
+
+# Обновленная функция для отображения ассортимента аксессуаров
 def format_accessories_list(user_data, language):
-    # Ожидаем, что user_data является словарем
     accessories = user_data.get('selected_accessories', [])
-    
-    # Проверка на корректность данных
-    if not isinstance(accessories, list) or not all(isinstance(item, dict) for item in accessories):
-        return "Некорректные данные аксесуарів" if language == 'uk' else "Некорректные данные аксессуаров"
-    
     if not accessories:
         return "Без аксесуарів" if language == 'uk' else "Без аксессуаров"
     
-    # Формирование строки с аксессуарами
-    return ', '.join(f"{item['name']} x{item['quantity']}" for item in accessories)
+    # Проверяем, что каждый элемент в списке является словарем
+    if isinstance(accessories, list) and all(isinstance(item, dict) for item in accessories):
+        return ', '.join(f"{item['name']} x{item['quantity']}" for item in accessories)
+    else:
+        return "Некорректные данные аксесуаров" if language == 'uk' else "Некорректные данные аксессуаров"
 
-# Функция для формирования списка аксессуаров для выбора
+# Исправленная функция для отображения полного списка ассортимента аксессуаров
 def format_accessories_list_detailed(accessories, language):
     message = "Доступні аксесуари:\n" if language == 'uk' else "Доступные аксессуары:\n"
-    
     if isinstance(accessories, list) and all(isinstance(item, dict) for item in accessories):
         for i, accessory in enumerate(accessories, start=1):
             message += f"{i}. {accessory['name']} - {accessory['delivery']} грн\n"
         message += "0. Не хочу аксесуари" if language == 'uk' else "0. Не хочу аксессуары"
     else:
-        message += "Некорректные данные аксесуарів" if language == 'uk' else "Некорректные данные аксессуаров"
+        message += "Некорректные данные аксесуаров" if language == 'uk' else "Некорректные данные аксессуаров"
     return message
 
 async def handle_address(update: Update, context):
@@ -933,7 +712,128 @@ async def handle_floor_number(update: Update, context):
             await update.message.reply_text("Пожалуйста, введите правильный номер этажа.")
         return FLOOR_NUMBER
 
-# Обработка предложения аксессуаров после выбора этажа
+def format_order_summary(user_data, water_total_cost, accessories_cost, floor_cost, total_cost):
+    language = user_data['language']
+    accessories_str = format_accessories_list(user_data, language)
+
+    # Подготавливаем данные для экранирования
+    service_type = 'Доставка' if user_data['service_type'] == 'delivery' else 'Самовивіз' if language == 'uk' else 'Самовывоз'
+    water_type = user_data['water_type'].capitalize()
+    address = user_data['address']
+    phone = user_data['phone']
+    floor = user_data['floor']
+    water_amount = str(user_data['water_amount'])
+    water_total_cost_str = f"{water_total_cost:.1f}"
+    accessories_str = accessories_str
+    floor_cost_str = f"{floor_cost}"
+    total_cost_str = f"{total_cost:.1f}"
+
+    # Формируем строку заказа без экранирования
+    if language == 'uk':
+        order_summary = (
+            f"*Нове замовлення:*\n"
+            f"Тип послуги: *{service_type}*\n"
+            f"Тип води: *{water_type}*\n"
+            f"Адреса: *{address}*\n"
+            f"Номер телефону: *{phone}*\n"
+            f"Кількість води: *{water_amount} л*\n"
+            f"Вартість води: *{water_total_cost_str} грн*\n"
+            f"Аксесуари: *{accessories_str}*\n"
+            f"Поверх/Тип будинку: *{floor}*\n"
+            f"Вартість підйому: *{floor_cost_str} грн*\n"
+            f"Загальна вартість: *{total_cost_str} грн*\n"
+        )
+    else:
+        order_summary = (
+            f"*Новый заказ:*\n"
+            f"Тип услуги: *{service_type}*\n"
+            f"Тип воды: *{water_type}*\n"
+            f"Адрес: *{address}*\n"
+            f"Номер телефона: *{phone}*\n"
+            f"Количество воды: *{water_amount} л*\n"
+            f"Стоимость воды: *{water_total_cost_str} грн*\n"
+            f"Аксессуары: *{accessories_str}*\n"
+            f"Этаж/Тип дома: *{floor}*\n"
+            f"Стоимость подъема: *{floor_cost_str} грн*\n"
+            f"Общая стоимость: *{total_cost_str} грн*\n"
+        )
+
+    # Логирование для отладки
+    print("Сформированный заказ:", order_summary)
+
+    return order_summary
+
+# Функция для вывода полного заказа после выбора аксессуаров
+async def handle_order_summary(update, context):
+    user_data = context.user_data
+    language = user_data['language']
+    water_total_cost, accessories_cost, floor_cost, total_cost = calculate_costs(user_data)
+    order_summary = format_order_summary(user_data, water_total_cost, accessories_cost, floor_cost, total_cost)
+    context.user_data['last_order'] = {
+        'order_summary': order_summary,
+        'final_notification': FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
+    }
+
+    # Логирование для отладки перед экранированием
+    print("Сформированный заказ до экранирования:", order_summary)
+
+    # Используем экранирование для Markdown
+    escaped_order_summary = escape_markdown(order_summary)
+
+    # Логирование после экранирования
+    print("Сформированный заказ после экранирования:", escaped_order_summary)
+
+    # Попробуем отправить сообщение пользователю с минимальным экранированием
+    try:
+        await update.message.reply_text(escaped_order_summary, parse_mode='Markdown')
+    except telegram.error.BadRequest as e:
+        print(f"Ошибка отправки сообщения: {e}")
+        # Если ошибка повторяется, отправим сообщение без экранирования
+        try:
+            await update.message.reply_text(order_summary)
+        except telegram.error.BadRequest as e:
+            print(f"Ошибка при отправке сообщения без экранирования: {e}")
+            await update.message.reply_text("Произошла ошибка при отправке сообщения. Пожалуйста, проверьте текст на наличие запрещенных символов.")
+        return
+
+    # Отправка сообщения в группу с минимальным экранированием
+    try:
+        await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=escaped_order_summary, parse_mode='Markdown')
+    except telegram.error.BadRequest as e:
+        print(f"Ошибка отправки сообщения в группу: {e}")
+        # Если ошибка повторяется, отправим сообщение без экранирования
+        try:
+            await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary)
+        except telegram.error.BadRequest as e:
+            print(f"Ошибка при отправке сообщения в группу без экранирования: {e}")
+            await update.message.reply_text("Произошла ошибка при отправке сообщения в группу. Пожалуйста, проверьте текст на наличие запрещенных символов.")
+        return
+
+    # Отправка финального уведомления
+    final_notification = context.user_data['last_order']['final_notification']
+
+    # Отправка финального уведомления пользователю
+    try:
+        await update.message.reply_text(final_notification)
+    except telegram.error.BadRequest as e:
+        print(f"Ошибка отправки финального уведомления: {e}")
+        await update.message.reply_text("Произошла ошибка при отправке финального уведомления.")
+
+    # Восстановим кнопку "Повторить заказ"
+    keyboard = [
+        [InlineKeyboardButton("Повторити замовлення" if language == 'uk' else "Повторить заказ", callback_data='repeat_order')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    try:
+        await update.message.reply_text("Если вы хотите повторить заказ, нажмите на кнопку ниже:", reply_markup=reply_markup)
+    except telegram.error.BadRequest as e:
+        print(f"Ошибка отправки кнопки повторного заказа: {e}")
+        await update.message.reply_text("Произошла ошибка при отправке кнопки повторного заказа.")
+
+    return ConversationHandler.END
+
+# Вызов подробного списка аксессуаров в функции `handle_accessories_offer`:
 async def handle_accessories_offer(update: Update, context):
     accessories_list = context.user_data['prices']['accessories']
     language = context.user_data.get('language', 'uk')
@@ -1046,145 +946,6 @@ def log_current_state(context, state_name):
     print(f"[LOG] Текущее состояние: {state_name}")
     print(f"[LOG] Данные пользователя: {context.user_data}")
 
-# Обработка команды /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    context.user_data['prices'] = get_prices_from_sheet('uk')
-
-    start_keyboard = ReplyKeyboardMarkup([
-        ["Старт розмови з Vodo.Ley"], 
-        ["Старт разговора с Vodo.Ley"]
-    ], one_time_keyboard=True)
-
-    await update.message.reply_text(
-        "Вітаємо! Оберіть мову та розпочніть розмову, натиснувши на відповідну кнопку:",
-        reply_markup=start_keyboard
-    )
-    return LANGUAGE
-
-# Обработка выбора кнопки и автоматическое определение языка
-async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_choice = update.message.text.strip().lower()
-    print(f"[LOG] Вызов set_language с выбором: {user_choice}")
-
-    if user_choice == "старт розмови з vodo.ley":
-        context.user_data['language'] = 'uk'
-        context.user_data['prices'] = get_prices_from_sheet('uk')
-        await update.message.reply_text(
-            "Мова встановлена на українську. Давайте розпочнемо!",
-        )
-    elif user_choice == "старт разговора с vodo.ley":
-        context.user_data['language'] = 'ru'
-        context.user_data['prices'] = get_prices_from_sheet('ru')
-        await update.message.reply_text(
-            "Язык установлен на русский. Давайте начнем!",
-        )
-    else:
-        await update.message.reply_text("Будь ласка, оберіть один із варіантів: Старт розмови з Vodo.Ley або Старт разговора с Vodo.Ley.")
-        return LANGUAGE
-
-    if context.user_data['language'] == 'uk':
-        await update.message.reply_text("Виберіть тип послуги: 1 - Доставка, 2 - Самовивіз.")
-    else:
-        await update.message.reply_text("Выберите тип услуги: 1 - Доставка, 2 - Самовывоз.")
-    
-    return SERVICE_TYPE
-
-async def call_ai(update: Update, context):
-    print("[LOG] Команда /call_ai вызвана.")
-    language = context.user_data.get('language', 'uk')
-    print(f"[LOG] Язык для ИИ: {language}")
-
-    if language == 'uk':
-        welcome_message = "Привіт! Я штучний інтелект і готовий допомогти вам. Ви можете задати будь-яке питання, і я спробую дати вам відповідь."
-    else:
-        welcome_message = "Здравствуйте! Я искусственный интеллект и готов помочь вам. Вы можете задать любой вопрос, и я постараюсь вам помочь."
-
-    try:
-        print("[LOG] Отправка приветственного сообщения...")
-        await update.message.reply_text(welcome_message)
-        print("[LOG] Приветственное сообщение отправлено.")
-    except Exception as e:
-        print(f"[ERROR] Ошибка при отправке приветственного сообщения: {e}")
-
-    context.user_data['state'] = GENERAL
-    print("[LOG] Переход в состояние GENERAL.")
-    return GENERAL
-
-def set_user_state(context, state):
-    context.user_data['state'] = state
-    print(f"[LOG] Установлено состояние: {state}")
-
-def get_latest_gpt_model():
-    try:
-        models = openai.Model.list()['data']
-        gpt_models = [model['id'] for model in models if 'gpt' in model['id']]
-        latest_model = sorted(gpt_models, reverse=True)[0]
-        print(f"[LOG] Используется модель: {latest_model}")
-        return latest_model
-    except Exception as e:
-        print(f"[ERROR] Не удалось получить последнюю версию модели: {e}")
-        return "gpt-4"
-
-async def handle_gpt_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("[LOG] Обработчик handle_gpt_response вызван.")
-    state = context.user_data.get('state', 'UNKNOWN')
-    print(f"[LOG] Текущее состояние: {state}")
-    print(f"[LOG] Входящее сообщение: {update.message.text}")
-
-    if state != GENERAL:
-        print("[ERROR] Сообщение пришло в неверное состояние.")
-        await update.message.reply_text("Произошла ошибка состояния. Пожалуйста, начните с команды /start.")
-        return
-    
-    user_input = update.message.text.strip()
-    language = context.user_data.get('language', 'uk')
-    print(f"[LOG] Отправка запроса в GPT с текстом: {user_input}")
-    system_prompt = (
-        "Ви — корисний асистент, який допомагає користувачам українською мовою. Будь ласка, відповідайте коротко і чітко."
-        if language == 'uk' 
-        else "Вы — полезный ассистент, который помогает пользователям на русском языке. Пожалуйста, отвечайте кратко и по делу."
-    )
-
-    model = get_latest_gpt_model()
-
-    try:
-        rate_limiter()
-
-        print(f"[LOG] Отправка запроса в OpenAI: model='{model}', system_prompt='{system_prompt}', user_input='{user_input}'")
-        
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            max_tokens=300,
-            n=1
-        )
-        print("[LOG] Ответ от GPT получен: ", response)
-
-        answer = response['choices'][0]['message']['content'].strip()
-        print(f"[LOG] Полный ответ ИИ: {answer}")
-
-        if len(answer.split()) < 50 and not answer.endswith("."):
-            answer += " (Ответ был обрезан. Пожалуйста, уточните ваш вопрос, если нужно продолжение.)"
-        else:
-            answer = answer
-
-        await update.message.reply_text(answer)
-        print("[LOG] Ответ пользователю отправлен.")
-    except openai.error.OpenAIError as e:
-        error_message = f"Произошла ошибка при получении ответа: {e}"
-        print(f"[ERROR] Ошибка при запросе к GPT: {error_message}")
-        await update.message.reply_text(error_message)
-    except Exception as e:
-        print(f"[ERROR] Неизвестная ошибка: {e}")
-        await update.message.reply_text("Произошла ошибка при обработке вашего вопроса. Пожалуйста, попробуйте еще раз.")
-
-    print("[LOG] Ожидание следующего вопроса в состоянии GENERAL.")
-    return GENERAL
-
 async def repeat_order(update: Update, context):
     query = update.callback_query
     await query.answer()
@@ -1196,12 +957,15 @@ async def repeat_order(update: Update, context):
     
     order_summary = last_order['order_summary']
     
+    # Логирование перед отправкой сообщения
     print("Повтор заказа перед отправкой:", order_summary)
 
+    # Отправляем сообщение пользователю с минимальным экранированием (Markdown)
     try:
         await context.bot.send_message(chat_id=query.message.chat_id, text=order_summary, parse_mode='Markdown')
     except telegram.error.BadRequest as e:
         print(f"Ошибка отправки сообщения: {e}")
+        # Если ошибка повторяется, отправим сообщение без экранирования
         try:
             await context.bot.send_message(chat_id=query.message.chat_id, text=order_summary)
         except telegram.error.BadRequest as e:
@@ -1209,10 +973,12 @@ async def repeat_order(update: Update, context):
             await query.edit_message_text("Произошла ошибка при отправке сообщения. Пожалуйста, проверьте текст на наличие запрещенных символов.")
         return
     
+    # Отправляем сообщение в группу с минимальным экранированием (Markdown)
     try:
         await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary, parse_mode='Markdown')
     except telegram.error.BadRequest as e:
         print(f"Ошибка отправки сообщения в группу: {e}")
+        # Если ошибка повторяется, отправим сообщение без экранирования
         try:
             await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=order_summary)
         except telegram.error.BadRequest as e:
@@ -1220,6 +986,7 @@ async def repeat_order(update: Update, context):
             await query.edit_message_text("Произошла ошибка при отправке сообщения в группу. Пожалуйста, проверьте текст на наличие запрещенных символов.")
         return
     
+    # Отправляем информационное сообщение пользователю
     final_notification = last_order['final_notification']
     try:
         await context.bot.send_message(chat_id=query.message.chat_id, text=final_notification)
@@ -1227,6 +994,7 @@ async def repeat_order(update: Update, context):
         print(f"Ошибка отправки финального уведомления: {e}")
         await query.edit_message_text("Произошла ошибка при отправке финального уведомления.")
 
+    # Восстанавливаем кнопку "Повторить заказ"
     keyboard = [
         [InlineKeyboardButton("Повторити замовлення" if context.user_data['language'] == 'uk' else "Повторить заказ", callback_data='repeat_order')]
     ]
@@ -1238,27 +1006,98 @@ async def repeat_order(update: Update, context):
         print(f"Ошибка отправки кнопки повторного заказа: {e}")
         await query.edit_message_text("Произошла ошибка при отправке кнопки повторного заказа.")
 
+# Функция для ограничения частоты запросов
+def rate_limiter():
+    print("[LOG] Ожидание 1 секунду перед отправкой следующего запроса...")
+    sleep(1)  # Убедитесь, что задержка не блокирует основной поток
+
+# Обновленный метод для логирования состояния пользователя на каждом этапе
+def log_current_state(context, state_name):
+    print(f"[LOG] Текущее состояние: {state_name}")
+    print(f"[LOG] Данные пользователя: {context.user_data}")
+    
+# Обновленная функция для отправки финального уведомления с правильным экранированием
+async def send_final_notification(update, context):
+    language = context.user_data.get('language', 'uk')
+    final_notification_raw = FINAL_NOTIFICATION_UK_RAW if language == 'uk' else FINAL_NOTIFICATION_RU_RAW
+    
+    # Экранируем только перед отправкой
+    final_notification = escape_markdown_v2(final_notification_raw)
+    await update.message.reply_text(final_notification, parse_mode='MarkdownV2')
+    
+# Функция для получения прайсов из Google Sheets с учетом языка
+def get_prices_from_sheet(language):
+    try:
+        sheet = client.open('Прайс-лист').sheet1
+        data = sheet.get_all_records()
+
+        prices = {'water': {}, 'accessories': []}
+        name_column = 'Название (укр)' if language == 'uk' else 'Название (рус)'
+
+        def parse_price(value):
+            try:
+                return float(str(value).replace(',', '.'))
+            except ValueError:
+                return 0.0
+
+        for row in data:
+            item_type = row['Тип'].lower()
+            if item_type == 'water':
+                water_name = row[name_column].strip().lower()
+                prices['water'][water_name] = {
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                }
+            elif item_type in ['pump', 'container']:
+                prices['accessories'].append({
+                    'name': row[name_column].strip(),
+                    'delivery': parse_price(row['Доставка']),
+                    'pickup': parse_price(row['Самовывоз'])
+                })
+
+        return prices
+
+    except Exception as e:
+        return None
+
+# Обработчик состояния LANGAUGE и начало разговора
 order_conversation = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
-        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
-        SERVICE_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_service_type)],
-        WATER_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_water_type)],
-        ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address)],
-        PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone)],
-        WATER_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_water_amount)],
-        ACCESSORIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_accessories_offer)],
-        ACCESSORIES_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_accessories_choice)],
-        FLOOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_floor)],
-        FLOOR_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_floor_number)],
-        ASK_DELIVERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ask_delivery)],
-        ASK_CONTINUE_ORDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_continue_order)],
-        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],
+        LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],  # Обработка выбора языка и начала разговора
+        GENERAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gpt_response)],  # Обработчик состояния GENERAL
     },
     fallbacks=[CommandHandler('start', start), CommandHandler('call_ai', call_ai)],
     per_message=False
 )
 
+# Основной блок инициализации приложения и бота
 if __name__ == '__main__':
-    start_bot()
+    print("Запуск бота...")
+
+    # Инициализация Telegram бота
+    application = ApplicationBuilder().token(telegram_token).build()
+       
+    # Добавление ваших ConversationHandlers и других обработчиков
+    application.add_handler(CommandHandler('start', start))
+
+    # Добавление командного обработчика для вызова AI
+    print("Добавление обработчика для команды /call_ai...")
+    application.add_handler(CommandHandler('call_ai', call_ai))
+    print("CommandHandler для /call_ai добавлен.")
+
+    # Пауза для гарантии запуска сервера
+    time.sleep(5) 
+    
+    # Установка вебхука
+    asyncio.run(set_webhook(application, "https://vodo-ley.onrender.com"))
+
+    # Запуск сервера FastAPI для приема вебхуков (если используете вебхуки)
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # Запуск бота на поллинге
+    # print("Бот запускается на поллинге...")
+    # application.run_polling(drop_pending_updates=True, timeout=30)
+    # print("Бот запущен и ожидает сообщений.")
 
