@@ -1238,18 +1238,21 @@ order_conversation = ConversationHandler(
 
 if __name__ == '__main__':
     try:
-        # Попробуем получить текущий event loop
+        # Проверяем, существует ли активный event loop
         loop = asyncio.get_event_loop()
         
-        # Проверяем, если loop уже запущен
+        # Если event loop не запущен, запускаем main через asyncio.run
         if not loop.is_running():
             print("Запуск нового event loop.")
-            asyncio.run(main())  # Используем asyncio.run для запуска main
+            asyncio.run(main())
         else:
-            print("Event loop уже запущен. Используем существующий loop.")
-            loop.create_task(main())  # Добавление корутины в уже существующий цикл событий
-    except RuntimeError:
-        print("Создаем новый event loop.")
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(main())
+            print("Event loop уже запущен. Добавляем main в существующий loop.")
+            # В существующем loop запускаем main
+            loop.create_task(main())
+    except RuntimeError as e:
+        print(f"Ошибка в управлении event loop: {e}")
+        
+        if not asyncio.get_event_loop().is_running():
+        asyncio.run(main())
+    else:
+        asyncio.get_event_loop().create_task(main())
