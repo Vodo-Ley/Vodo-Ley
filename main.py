@@ -15,6 +15,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 import asyncio
 import time
+import aiohttp
 
 # Настройка Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -30,6 +31,18 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
+
+# Настройка сессии aiohttp
+session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10))  # limit - это размер пула подключений
+
+# Инициализация бота с кастомной сессией
+application = ApplicationBuilder().token(telegram_token).session(session).build()
+
+session = aiohttp.ClientSession(
+    connector=aiohttp.TCPConnector(limit=10),  # Пул подключений
+    timeout=aiohttp.ClientTimeout(total=30)    # Время ожидания (в секундах)
+)
+await session.close()
 
 # Финальные уведомления без экранирования
 FINAL_NOTIFICATION_UK_RAW = (
@@ -1127,7 +1140,7 @@ order_conversation = ConversationHandler(
 )
 
 # Увеличиваем количество соединений в пуле
-application = ApplicationBuilder().token(telegram_token).defaults(Defaults(pool_size=10)).build()
+application = ApplicationBuilder().token(telegram_token).session(session).build()
 
 # Добавление обработчиков
 application.add_handler(order_conversation)  # Обработчик диалога
