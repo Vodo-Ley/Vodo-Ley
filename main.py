@@ -67,10 +67,9 @@ async def root():
 async def webhook(request: Request):
     json_data = await request.json()
     update = Update.de_json(json_data, application.bot)  # Создаем объект update из JSON данных
-    context = await application.get_context(update)  # Получаем context для текущего update
     
-    # Вызываем обработку
-    await handle_request(update, context)
+    # Подаем update в очередь обработчика, чтобы приложение могло обработать его
+    await application.update_queue.put(update)
     
     return {"status": "ok"}
 
