@@ -80,7 +80,7 @@ async def main():
         application = (
             ApplicationBuilder()
             .token(telegram_token)
-            .http_session(session)
+            .http_session(session)  # Используем http_session вместо session
             .build()
         )
 
@@ -102,9 +102,11 @@ async def main():
         application.add_handler(order_conversation)
 
         # Запускаем бота и сервер FastAPI параллельно
-        async with application:
-            await application.start()
-            await uvicorn.run(app, host="0.0.0.0", port=10000)
+        await application.start()  # Запускаем Telegram бота
+
+        config = uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()  # Запускаем FastAPI сервер
 
 # Обработчики команд и диалогов (пример функции start)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
