@@ -21,8 +21,8 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', sco
 client = gspread.authorize(creds)
 
 # Устанавливаем API-ключи OpenAI и Telegram токен напрямую в коде
-openai.api_key = "sk-QeFVXulFFgfd07PE8jgkKqQkv-lWBUu1T7LSQDGkcxT3BlbkFJXkqfnG00x2jCjd-YwDCJEDx-9YajBpEdMQV4HMxkgA"
-telegram_token = "6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk"
+openai.api_key = os.environ['sk-QeFVXulFFgfd07PE8jgkKqQkv-lWBUu1T7LSQDGkcxT3BlbkFJXkqfnG00x2jCjd-YwDCJEDx-9YajBpEdMQV4HMxkgA']
+telegram_token = os.environ['6476507346:AAFs7OxBI6wDrigeYhblqRu948A8lfZsibk']
 
 # Шаги для диалога
 LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, ACCESSORIES_CHOICE, FLOOR, FLOOR_NUMBER, ASK_DELIVERY, ASK_CONTINUE_ORDER, GENERAL = range(13)
@@ -104,7 +104,7 @@ async def main():
         )
 
         # Устанавливаем вебхук
-        webhook_url = "https://vodo-ley.onrender.com"
+        webhook_url = "vodo-ley-production.up.railway.app"
         try:
             webhook_info = await application.bot.get_webhook_info()
             if webhook_info.url != webhook_url:
@@ -122,10 +122,6 @@ async def main():
 
         # Запускаем бота и сервер FastAPI параллельно
         await application.start()  # Запускаем Telegram бота
-
-        config = uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()  # Запускаем FastAPI сервер
 
 # Обработчики команд и диалогов (пример функции start)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1087,6 +1083,9 @@ order_conversation = ConversationHandler(
     per_message=False,
 )
 
-# Запуск основного цикла
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+    asyncio.run(server.serve())
+
