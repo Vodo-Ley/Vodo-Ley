@@ -77,7 +77,7 @@ async def main():
     await application.bot.delete_webhook(drop_pending_updates=True)
     print("Webhook удален. Запуск поллинга...")
     
-    # Запуск поллинга в текущем event loop
+    # Запуск бота с поллингом
     await application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
@@ -1230,15 +1230,7 @@ order_conversation = ConversationHandler(
     per_message=False
 )
 
+# Удалите всю логику проверки loop и просто запустите основную функцию через asyncio.run()
 if __name__ == '__main__':
-    try:
-        loop = asyncio.get_event_loop()
-        if not loop.is_running():
-            print("Запуск нового event loop.")
-            loop.run_until_complete(main())  # Используем существующий loop для выполнения main()
-        else:
-            print("Event loop уже запущен. Добавляем main в существующий loop.")
-            asyncio.ensure_future(main())  # Добавляем main в уже запущенный loop
-    except RuntimeError as e:
-        print(f"Ошибка в управлении event loop: {e}")
+    asyncio.run(main())
 
