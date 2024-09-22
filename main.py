@@ -81,6 +81,23 @@ async def main():
     await application.run_polling(drop_pending_updates=True)
     print("Бот запущен и ожидает сообщений.")
 
+def start_bot():
+    try:
+        # Проверяем, существует ли активный event loop и работает ли он
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Если event loop уже запущен, создаем задачу в текущем loop
+            print("Добавляем задачу main() в уже работающий event loop.")
+            loop.create_task(main())
+        else:
+            # Если event loop не запущен, создаем и запускаем новый loop
+            print("Запуск нового event loop с asyncio.run().")
+            asyncio.run(main())
+    except RuntimeError as e:
+        print(f"Ошибка управления event loop: {e}")
+    except Exception as e:
+        print(f"Общая ошибка: {e}")
+
 # Обновленная функция для отправки финального уведомления с правильным экранированием
 async def send_final_notification(update, context):
     language = context.user_data.get('language', 'uk')
@@ -1231,20 +1248,5 @@ order_conversation = ConversationHandler(
 )
 
 if __name__ == '__main__':
-    try:
-        # Получаем текущий event loop, если он существует
-        loop = asyncio.get_event_loop()
-        
-        if not loop.is_running():
-            # Если event loop не запущен, запускаем его через asyncio.run
-            print("Запуск нового event loop.")
-            asyncio.run(main())
-        else:
-            # Если event loop уже запущен, добавляем задачу main в него
-            print("Event loop уже запущен. Добавляем main в существующий loop.")
-            loop.create_task(main())
-    except RuntimeError as e:
-        print(f"Ошибка в управлении event loop: {e}")
-    except Exception as e:
-        print(f"Общая ошибка: {e}")
+    start_bot()
 
