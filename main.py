@@ -1244,15 +1244,16 @@ if __name__ == '__main__':
         # Если event loop не запущен, запускаем main через asyncio.run
         if not loop.is_running():
             print("Запуск нового event loop.")
-            asyncio.run(main())
+            asyncio.run(main())  # Отступ на 4 пробела
         else:
             print("Event loop уже запущен. Добавляем main в существующий loop.")
             # В существующем loop запускаем main
-            loop.create_task(main())
+            loop.create_task(main())  # Отступ на 4 пробела
     except RuntimeError as e:
         print(f"Ошибка в управлении event loop: {e}")
         
-        if not asyncio.get_event_loop().is_running():
-        asyncio.run(main())
+if __name__ == '__main__':
+    if not asyncio.get_event_loop().is_running():
+        asyncio.run(main())  # Этот вызов должен быть с отступом
     else:
-        asyncio.get_event_loop().create_task(main())
+        asyncio.get_event_loop().create_task(main())  # Этот вызов также должен быть с отступом
