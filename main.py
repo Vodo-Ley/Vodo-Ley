@@ -30,6 +30,25 @@ LANGUAGE, SERVICE_TYPE, WATER_TYPE, ADDRESS, PHONE, WATER_AMOUNT, ACCESSORIES, A
 # ID группы для отправки заказов
 GROUP_CHAT_ID = '-4583041111'
 
+# Настройка кастомной сессии
+session = aiohttp.ClientSession(
+    connector=aiohttp.TCPConnector(limit=10),
+    timeout=aiohttp.ClientTimeout(total=30)
+)
+
+# Создание кастомного клиента
+from telegram.request import AiohttpSession
+
+custom_request = AiohttpSession(session)
+
+# Инициализация бота с кастомной сессией
+application = ApplicationBuilder().token(telegram_token).request(custom_request).build()
+
+# Регистрация хендлеров
+application.add_handler(CommandHandler('start', start))
+application.add_handler(CommandHandler('call_ai', call_ai))
+application.add_handler(order_conversation)
+
 # Инициализация FastAPI приложения
 app = FastAPI()
 
